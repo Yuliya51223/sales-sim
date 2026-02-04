@@ -1,333 +1,291 @@
-/* === Hybrid Sales Chat Simulator (Scenario + Optional LLM via Worker) ===
-   - No build tools. Vanilla JS.
-   - LLM mode calls a serverless proxy (Worker) to keep API key off the browser.
-   - Offline fallback is rule-based so you can run it locally or on GitHub Pages.
+/* Sales Simulator v2
+   - index.html: setup page -> creates session link to chat.html?sid=...
+   - chat.html: chat page with manager name prompt, end dialog button reveals scoring
+   - Optional LLM via Worker (YandexGPT or other) using Worker URL
+   - Optional saving: download JSON or POST to Worker /save (if implemented)
 */
 
-const STORAGE_KEY = "sales-sim:v1";
-
+const STORAGE_NS = "sales-sim:v2";
 const DEFAULT_CONFIG = {
-  useLLM: false,
-  workerUrl: "",              // e.g. https://your-worker.workers.dev
-  fallbackMode: "rules"       // "rules" | "random"
+  workerUrl: "",
+  useLLM: true,
+  saveMode: "download" // "download" | "worker"
 };
 
-// One scenario + scoring rules (MVP)
-const scenario = {
-  id: "s001",
-  title: "Кровля для частного дома: сомнения в цене и выборе покрытия",
-  client: {
-    name: "Андрей",
-    tone: "спокойный",
-    knowledge: "низкий",
-    goal: "понять варианты и цену, не переплатить",
-    constraints: "срок ~ 2 недели"
-  },
-  context: {
-    city: "Волгоград",
-    product: "профлист/металлочерепица",
-    pain: "не понимает разницу покрытий, боится переплатить"
-  },
-  // What the scenario expects the manager to do
-  checklist: [
-    {
-      key: "need_discovery",
-      title: "Выявление потребностей",
-      desc: "Задать 2+ уточняющих вопроса: площадь/геометрия, покрытие, сроки, доставка, бюджет."
-    },
-    {
-      key: "price_frame",
-      title: "Объяснить от чего зависит цена",
-      desc: "Коротко и понятно: толщина, покрытие, объем, доборные элементы, доставка/монтаж."
-    },
-    {
-      key: "empathy",
-      title: "Снять страх переплаты",
-      desc: "Эмпатия + логика: 'понимаю', 'сравним 2–3 варианта', 'без лишних затрат'."
-    },
-    {
-      key: "next_step",
-      title: "Следующий шаг",
-      desc: "Предложить КП/созвон/замер и зафиксировать что нужно для расчёта."
-    }
-  ],
-  // Offline reply rules (fallback)
-  rules: [
-    {
-      id: "start",
-      when: (m, st) => st.turns === 0,
-      reply: () => "Здравствуйте. Хочу крышу перекрыть, но не понимаю что выбрать и сколько это будет стоить."
-    },
-    {
-      id: "ask_price_first",
-      when: (m, st) => /цена|сколько|стоимость|дорого|дешев/i.test(m) && st.needLevel < 2,
-      reply: () => "А от чего зависит цена? Мне бы понять порядок. Дом частный."
-    },
-    {
-      id: "provide_area",
-      when: (m, st) => /площад|м2|квадрат|скат|угол|размер|ширин|длин|план|чертеж/i.test(m),
-      effect: (st) => { st.clientShared.area = true; st.needLevel = Math.max(st.needLevel, 2); },
-      reply: () => "Площадь примерно 140 м², два ската. Чертежа нет, могу примерно описать."
-    },
-    {
-      id: "objection_overpay",
-      when: (m, st) => /покрыт|полимер|грунт|толщин|гарант|срок служб|цинк/i.test(m) || st.flags.priceFrame,
-      reply: () => "Честно, боюсь переплатить. Хочется надежно, но без лишних затрат."
-    },
-    {
-      id: "ready_next_step",
-      when: (m, st) => /кп|коммерческ|расчет|смет|созвон|замер|встреч|whatsapp|телеграм|телефон/i.test(m),
-      effect: (st) => { st.flags.nextStep = true; },
-      reply: () => "Давайте. Как удобнее — созвон или вы пришлете расчет в сообщении?"
-    },
-    {
-      id: "close",
-      when: (m, st) => st.flags.needDiscovery && st.flags.priceFrame && st.flags.nextStep,
-      reply: () => "Ок, звучит хорошо. Пришлите 2–3 варианта с разницей по покрытию, срокам и итоговой цене."
-    },
-    {
-      id: "generic",
-      when: () => true,
-      reply: () => "Понял. Можно чуть проще? Я не очень разбираюсь."
-    }
-  ]
-};
+document.addEventListener("DOMContentLoaded", () => {
+  const path = (location.pathname || "").toLowerCase();
+  if (path.endsWith("/chat.html") || path.endsWith("chat.html")) initChatPage();
+  else initSetupPage();
+});
 
-// ===== State =====
-const state = {
-  config: loadConfig(),
-  history: [],      // in chat format: {role: "user"|"assistant", content: string}
-  turns: 0,
-  flags: {
-    needDiscovery: false,
-    priceFrame: false,
-    empathy: false,
-    nextStep: false
-  },
-  needLevel: 0,
-  clientShared: {
-    area: false
-  }
-};
+/* ===================== SETUP PAGE ===================== */
+function initSetupPage(){
+  const createLinkBtn = byId("createLinkBtn");
+  const linkOut = byId("linkOut");
+  const copyBtn = byId("copyBtn");
 
-// ===== DOM =====
-const chatEl = document.getElementById("chat");
-const inputEl = document.getElementById("input");
-const sendBtn = document.getElementById("sendBtn");
-const resetBtn = document.getElementById("resetBtn");
-const exportBtn = document.getElementById("exportBtn");
-const llmToggle = document.getElementById("llmToggle");
-const workerUrlEl = document.getElementById("workerUrl");
-const fallbackModeEl = document.getElementById("fallbackMode");
-const saveConfigBtn = document.getElementById("saveConfigBtn");
-const scoreValueEl = document.getElementById("scoreValue");
-const checklistEl = document.getElementById("checklist");
-const scenarioTitleEl = document.getElementById("scenarioTitle");
-const scenarioMetaEl = document.getElementById("scenarioMeta");
-const statusDotEl = document.getElementById("statusDot");
-const statusTextEl = document.getElementById("statusText");
-const hintTextEl = document.getElementById("hintText");
+  if (!createLinkBtn) return;
 
-// ===== Init =====
-renderScenario();
-renderChecklist();
-applyConfigToUI();
-boot();
+  // Prefill example
+  byId("c_name").value ||= "Андрей";
+  byId("c_city").value ||= "Волгоград";
+  byId("c_goal").value ||= "понять варианты и цену, не переплатить";
+  byId("c_context").value ||= "Частный дом, хочет перекрыть крышу, не разбирается в покрытиях.";
+  byId("s_title").value ||= "Кровля: сомнения в цене и выборе покрытия";
 
-// ===== Functions =====
-function boot(){
-  // load session history
-  const saved = loadSession();
-  if (saved){
-    state.history = saved.history || [];
-    state.turns = saved.turns || 0;
-    state.flags = saved.flags || state.flags;
-    state.needLevel = saved.needLevel || 0;
-    state.clientShared = saved.clientShared || state.clientShared;
-    state.config = saved.config || state.config;
-    applyConfigToUI();
-  }
-  renderChat();
-  if (state.turns === 0){
-    // start with client greeting
-    postClientMessage(offlineReply("", true));
-  }
-  updateUI();
+  createLinkBtn.addEventListener("click", () => {
+    const session = buildSessionFromForm();
+    const sid = "s_" + randomId(12);
+    saveSession(sid, session);
+
+    const url = new URL(location.href);
+    url.pathname = url.pathname.replace(/index\.html$/i, "chat.html").replace(/\/$/,"/chat.html");
+    url.searchParams.set("sid", sid);
+
+    linkOut.value = url.toString();
+    toast("Ссылка создана");
+  });
+
+  copyBtn?.addEventListener("click", async () => {
+    if (!linkOut.value) return;
+    await navigator.clipboard.writeText(linkOut.value);
+    toast("Скопировано");
+  });
 }
 
-function renderScenario(){
-  scenarioTitleEl.textContent = scenario.title;
-  scenarioMetaEl.textContent =
-    `Клиент: ${scenario.client.name} • Тон: ${scenario.client.tone} • Цель: ${scenario.client.goal} • Контекст: ${scenario.context.city}, ${scenario.context.product}`;
-}
+function buildSessionFromForm(){
+  const rubricLines = (byId("rubric").value || "").split("\n").map(s => s.trim()).filter(Boolean);
+  const checklist = rubricLines.map((line, idx) => {
+    const parts = line.split("|").map(p => p.trim());
+    const title = parts[0] || `Пункт ${idx+1}`;
+    const desc = parts[1] || "";
+    const points = toInt(parts[2], 1);
+    return { key: "k" + (idx+1), title, desc, points };
+  });
 
-function renderChecklist(){
-  checklistEl.innerHTML = "";
-  for (const item of scenario.checklist){
-    const row = document.createElement("div");
-    row.className = "checkItem";
-    row.innerHTML = `
-      <div class="checkLeft">
-        <div class="checkTitle">${escapeHtml(item.title)}</div>
-        <div class="checkDesc">${escapeHtml(item.desc)}</div>
-      </div>
-      <div class="badge no" id="badge-${item.key}">нет</div>
-    `;
-    checklistEl.appendChild(row);
-  }
-}
-
-function applyConfigToUI(){
-  llmToggle.checked = !!state.config.useLLM;
-  workerUrlEl.value = state.config.workerUrl || "";
-  fallbackModeEl.value = state.config.fallbackMode || "rules";
-}
-
-function setStatus(kind, text){
-  statusDotEl.classList.remove("good","warn","bad");
-  if (kind) statusDotEl.classList.add(kind);
-  statusTextEl.textContent = text || "Готово";
-}
-
-function renderChat(){
-  chatEl.innerHTML = "";
-  for (const msg of state.history){
-    addBubble(msg.content, msg.role === "user" ? "me" : "client");
-  }
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
-
-function addBubble(text, who, tagText){
-  const row = document.createElement("div");
-  row.className = "msg " + (who === "me" ? "me" : "client");
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  bubble.textContent = text;
-  if (tagText){
-    const tag = document.createElement("div");
-    tag.className = "smalltag";
-    tag.textContent = tagText;
-    bubble.appendChild(tag);
-  }
-  row.appendChild(bubble);
-  chatEl.appendChild(row);
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
-
-function postManagerMessage(text){
-  state.history.push({ role: "user", content: text });
-  addBubble(text, "me");
-}
-
-function postClientMessage(text, tag){
-  state.history.push({ role: "assistant", content: text });
-  addBubble(text, "client", tag || "");
-}
-
-function updateUI(){
-  const score = computeScore();
-  scoreValueEl.textContent = String(score.total);
-
-  // badges
-  setBadge("need_discovery", state.flags.needDiscovery);
-  setBadge("price_frame", state.flags.priceFrame);
-  setBadge("empathy", state.flags.empathy);
-  setBadge("next_step", state.flags.nextStep);
-
-  // hints
-  hintTextEl.textContent = makeHint();
-
-  // status indicator
-  if (state.config.useLLM && !state.config.workerUrl){
-    setStatus("warn", "LLM включен, но Worker URL пуст");
-  } else if (state.config.useLLM){
-    setStatus("good", "LLM режим");
-  } else {
-    setStatus(null, "Офлайн режим");
-  }
-
-  saveSession();
-}
-
-function setBadge(key, ok){
-  const el = document.getElementById(`badge-${key}`);
-  if (!el) return;
-  el.classList.remove("ok","no");
-  el.classList.add(ok ? "ok" : "no");
-  el.textContent = ok ? "ок" : "нет";
-}
-
-function computeScore(){
-  // simple weights
-  const w = { needDiscovery: 3, priceFrame: 3, empathy: 2, nextStep: 2 };
-  let total = 0;
-  if (state.flags.needDiscovery) total += w.needDiscovery;
-  if (state.flags.priceFrame) total += w.priceFrame;
-  if (state.flags.empathy) total += w.empathy;
-  if (state.flags.nextStep) total += w.nextStep;
-  return { total };
-}
-
-function makeHint(){
-  if (!state.flags.needDiscovery) return "Спросите параметры: площадь, геометрия, сроки, доставка.";
-  if (!state.flags.priceFrame) return "Объясните простыми словами от чего зависит цена.";
-  if (!state.flags.empathy) return "Снимите страх переплаты: 'понимаю', сравним 2–3 варианта.";
-  if (!state.flags.nextStep) return "Предложите следующий шаг: КП/созвон/замер.";
-  return "Можно завершать: зафиксируйте договоренности и отправьте варианты.";
-}
-
-// ===== Evaluation from manager message =====
-function evaluateManagerMessage(m){
-  const msg = (m || "").toLowerCase();
-
-  // Need discovery: 2+ question marks or key parameters asked
-  const qCount = (m.match(/\?/g) || []).length;
-  const asksParams = /площад|м2|квадрат|скат|угол|размер|доставк|срок|адрес|бюджет|проект|чертеж/.test(msg);
-  if (qCount >= 2 || (asksParams && state.needLevel >= 1)) state.flags.needDiscovery = true;
-  if (asksParams) state.needLevel = Math.min(3, state.needLevel + 1);
-
-  // Price framing: mentions drivers
-  const frames = /толщин|покрыт|цинк|добор|саморез|доставк|объем|монтаж|гарант|срок служб/.test(msg);
-  if (frames) state.flags.priceFrame = true;
-
-  // Empathy: simple phrases
-  const empath = /понимаю|вас понимаю|логично|согласен|не переплач|без лишн|давайте сравним|подберем/.test(msg);
-  if (empath) state.flags.empathy = true;
-
-  // Next step
-  const next = /кп|коммерческ|расчет|смет|созвон|замер|встреч|оформим|зафиксир|что нужно/.test(msg);
-  if (next) state.flags.nextStep = true;
-}
-
-// ===== Client reply (LLM or offline) =====
-async function getClientReply(managerMsg){
-  if (state.config.useLLM && state.config.workerUrl){
-    return await llmReply(managerMsg);
-  }
-  return { reply: offlineReply(managerMsg, false), intent: "offline", tags: ["offline"] };
-}
-
-async function llmReply(managerMsg){
-  setStatus("warn", "Клиент печатает…");
-  const payload = {
-    history: state.history.slice(-12), // keep short
+  return {
+    createdAt: new Date().toISOString(),
     scenario: {
-      id: scenario.id,
-      title: scenario.title,
-      client: scenario.client,
-      context: scenario.context,
-      // Include current state so LLM stays on rails
+      title: byId("s_title").value.trim() || "Сценарий",
+      client: {
+        name: byId("c_name").value.trim() || "Клиент",
+        city: byId("c_city").value.trim() || "",
+        goal: byId("c_goal").value.trim() || "",
+        tone: byId("c_tone").value,
+        delivery: byId("c_delivery").value,
+        context: byId("c_context").value.trim() || ""
+      },
+      checklist
+    },
+    config: {
+      ...loadConfig(),
+      useLLM: !!byId("llmDefault").checked
+    },
+    transcript: [], // filled on chat page
+    manager: { fio: "" },
+    endedAt: null,
+    score: null
+  };
+}
+
+/* ===================== CHAT PAGE ===================== */
+function initChatPage(){
+  const sid = new URLSearchParams(location.search).get("sid") || "";
+  const session = sid ? loadSession(sid) : null;
+
+  // DOM refs
+  const chatEl = byId("chat");
+  const inputEl = byId("input");
+  const sendBtn = byId("sendBtn");
+  const resetBtn = byId("resetBtn");
+  const endBtn = byId("endBtn");
+  const llmToggle = byId("llmToggle");
+  const workerUrlEl = byId("workerUrl");
+  const saveModeEl = byId("saveMode");
+  const saveConfigBtn = byId("saveConfigBtn");
+
+  const scenarioTitleEl = byId("scenarioTitle");
+  const scenarioMetaEl = byId("scenarioMeta");
+  const statusDotEl = byId("statusDot");
+  const statusTextEl = byId("statusText");
+  const hintTextEl = byId("hintText");
+  const checklistEl = byId("checklist");
+  const scoreValueEl = byId("scoreValue");
+  const managerPill = byId("managerPill");
+  const sessionInfo = byId("sessionInfo");
+
+  // basic guard
+  if (!session){
+    scenarioTitleEl.textContent = "Сессия не найдена";
+    scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки (index.html).";
+    setStatus(statusDotEl, statusTextEl, "bad", "Нет сессии");
+    disableChat(true);
+    return;
+  }
+
+  // state
+  const state = {
+    sid,
+    session,
+    config: { ...loadConfig(), ...(session.config || {}) },
+    history: session.transcript || [],  // {role:"user"|"assistant", content, ts}
+    flags: {}, // computed on end
+    ended: !!session.endedAt
+  };
+
+  // init UI config
+  workerUrlEl.value = state.config.workerUrl || "";
+  llmToggle.checked = !!state.config.useLLM;
+  saveModeEl.value = state.config.saveMode || "download";
+
+  // render scenario
+  scenarioTitleEl.textContent = state.session.scenario.title;
+  const c = state.session.scenario.client;
+  scenarioMetaEl.textContent =
+    `Клиент: ${c.name} • ${c.city} • Тон: ${c.tone} • Доставка: ${c.delivery} • Цель: ${c.goal}`;
+
+  sessionInfo.textContent = `Сессия: ${sid} • Создана: ${fmtDate(state.session.createdAt)}`;
+
+  // render chat
+  renderChat(chatEl, state.history);
+
+  // manager fio modal
+  ensureManagerFio(state, managerPill);
+
+  // checklist placeholders (hidden until end)
+  renderChecklist(checklistEl, state.session.scenario.checklist, null);
+
+  // events
+  sendBtn.addEventListener("click", () => onSend(state, chatEl, inputEl, sendBtn, hintTextEl, statusDotEl, statusTextEl));
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); onSend(state, chatEl, inputEl, sendBtn, hintTextEl, statusDotEl, statusTextEl); }
+  });
+
+  resetBtn.addEventListener("click", () => {
+    state.history = [];
+    state.session.transcript = [];
+    state.session.endedAt = null;
+    state.session.score = null;
+    state.session.flags = null;
+    state.ended = false;
+    saveSession(state.sid, state.session);
+    renderChat(chatEl, state.history);
+    renderChecklist(checklistEl, state.session.scenario.checklist, null);
+    scoreValueEl.textContent = "—";
+    setHint(hintTextEl, "Напишите первое сообщение клиенту.");
+    setStatus(statusDotEl, statusTextEl, null, "Офлайн/LLM готово");
+  });
+
+  endBtn.addEventListener("click", async () => {
+    const result = scoreConversation(state.session.scenario.checklist, state.history);
+    state.session.endedAt = new Date().toISOString();
+    state.session.score = result.score;
+    state.session.flags = result.flags;
+    state.ended = true;
+    saveSession(state.sid, state.session);
+
+    // show score now
+    scoreValueEl.textContent = `${result.score.total} баллов`;
+    renderChecklist(checklistEl, state.session.scenario.checklist, result.flags);
+    setHint(hintTextEl, "Диалог завершён. Можно экспортировать результат.");
+    setStatus(statusDotEl, statusTextEl, "good", "Завершено");
+
+    // auto-save
+    await autoSaveResult(state);
+  });
+
+  saveConfigBtn.addEventListener("click", () => {
+    state.config.workerUrl = workerUrlEl.value.trim();
+    state.config.useLLM = !!llmToggle.checked;
+    state.config.saveMode = saveModeEl.value;
+    saveConfig(state.config);
+    // also store into session so manager gets same defaults
+    state.session.config = { ...state.session.config, ...state.config };
+    saveSession(state.sid, state.session);
+    toast("Настройки сохранены");
+  });
+
+  llmToggle.addEventListener("change", () => {
+    state.config.useLLM = !!llmToggle.checked;
+    saveConfig(state.config);
+  });
+
+  // initial status/hint
+  if (state.config.useLLM && !state.config.workerUrl){
+    setStatus(statusDotEl, statusTextEl, "warn", "LLM включен, но Worker URL пуст");
+  } else if (state.config.useLLM){
+    setStatus(statusDotEl, statusTextEl, "good", "LLM режим");
+  } else {
+    setStatus(statusDotEl, statusTextEl, null, "Офлайн режим");
+  }
+  setHint(hintTextEl, "Пишите коротко и по делу. Оценка появится после завершения.");
+
+  function disableChat(disabled){
+    inputEl.disabled = disabled;
+    sendBtn.disabled = disabled;
+    endBtn.disabled = disabled;
+    resetBtn.disabled = disabled;
+  }
+}
+
+async function onSend(state, chatEl, inputEl, sendBtn, hintTextEl, statusDotEl, statusTextEl){
+  const text = (inputEl.value || "").trim();
+  if (!text) return;
+
+  if (state.ended){
+    toast("Диалог уже завершён. Нажмите Сброс, чтобы начать заново.");
+    return;
+  }
+
+  sendBtn.disabled = true;
+  inputEl.value = "";
+
+  pushMsg(state, "user", text);
+  appendBubble(chatEl, text, "me");
+
+  setStatus(statusDotEl, statusTextEl, "warn", "Клиент печатает…");
+
+  try{
+    const reply = await getClientReply(state, text);
+    pushMsg(state, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
+    appendBubble(chatEl, reply.reply, "client");
+    setStatus(statusDotEl, statusTextEl, state.config.useLLM ? "good" : null, "Готово");
+    setHint(hintTextEl, "Продолжайте. По завершению нажмите “Завершить диалог”.");
+  } catch (e){
+    setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
+    setHint(hintTextEl, "Ошибка ответа клиента. Проверьте Worker URL/доступ.");
+    console.error(e);
+  } finally {
+    saveSession(state.sid, state.session);
+    sendBtn.disabled = false;
+  }
+}
+
+/* ===================== LLM / fallback ===================== */
+async function getClientReply(state, managerMsg){
+  if (state.config.useLLM && state.config.workerUrl){
+    return await callWorkerChat(state, managerMsg);
+  }
+  // minimal offline fallback: ask to clarify
+  return { reply: "Я не очень понял. Можете объяснить проще?", intent: "offline", tags: ["offline"] };
+}
+
+async function callWorkerChat(state, managerMsg){
+  const url = state.config.workerUrl.replace(/\/$/,"");
+  const payload = {
+    history: state.session.transcript.map(m => ({ role: m.role, content: m.content })).slice(-12),
+    scenario: {
+      title: state.session.scenario.title,
+      client: state.session.scenario.client,
+      checklist: state.session.scenario.checklist,
+      manager: state.session.manager,
       state: {
-        turns: state.turns,
-        flags: state.flags,
-        needLevel: state.needLevel,
-        clientShared: state.clientShared
+        turns: state.session.transcript.length
       }
     },
     manager_message: managerMsg
   };
 
-  const url = state.config.workerUrl.replace(/\/$/, "");
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -335,169 +293,223 @@ async function llmReply(managerMsg){
   });
 
   if (!res.ok){
-    const text = await res.text();
-    setStatus("bad", "Ошибка Worker");
-    return { reply: "Похоже, произошла ошибка. Можем начать заново?", intent: "error", tags: ["worker_error"], debug: text.slice(0, 200) };
+    const txt = await res.text();
+    throw new Error(txt);
   }
-
   const data = await res.json();
-  // Expect {reply, intent, tags}
-  return {
-    reply: String(data.reply || "Уточните, пожалуйста."),
-    intent: String(data.intent || "unknown"),
-    tags: Array.isArray(data.tags) ? data.tags.map(String) : []
-  };
+  return { reply: String(data.reply || "Уточните, пожалуйста."), intent: String(data.intent || ""), tags: Array.isArray(data.tags) ? data.tags : [] };
 }
 
-function offlineReply(managerMsg, isStart){
-  const m = (managerMsg || "").trim();
-  if (isStart) return scenario.rules[0].reply();
+/* ===================== SCORING (shown only on End) ===================== */
+function scoreConversation(checklist, history){
+  const full = history.filter(m => m.role === "user").map(m => m.content).join("\n").toLowerCase();
 
-  // Optional: add small randomness in "random" mode
-  const randomMode = state.config.fallbackMode === "random";
-  const jitter = randomMode ? (Math.random() < 0.25) : false;
+  const flags = {};
+  let total = 0;
 
-  for (const rule of scenario.rules){
-    if (rule.when(m, state)){
-      if (rule.effect) rule.effect(state);
-      const base = rule.reply(m, state);
-      if (jitter && rule.id === "generic"){
-        const alt = [
-          "А можно пример по цене? Я просто не понимаю, что выбрать.",
-          "Я запутался: какое покрытие надежнее и не слишком дорого?",
-          "Если честно, хочу понять разницу без сложных терминов."
-        ];
-        return alt[Math.floor(Math.random() * alt.length)];
-      }
-      return base;
+  for (const item of checklist){
+    // lightweight heuristics; can be replaced by LLM-based grading later
+    let ok = false;
+
+    if (item.title.toLowerCase().includes("выяв")) {
+      const q = (full.match(/\?/g) || []).length;
+      ok = q >= 2 || /площад|м2|скат|срок|бюджет|доставк|адрес/.test(full);
+    } else if (item.title.toLowerCase().includes("цена")) {
+      ok = /толщин|покрыт|цинк|добор|доставк|объем|монтаж|гарант/.test(full);
+    } else if (item.title.toLowerCase().includes("страх") || item.title.toLowerCase().includes("эмпат")) {
+      ok = /понимаю|давайте сравним|без лишн|не перепла/.test(full);
+    } else if (item.title.toLowerCase().includes("следующ")) {
+      ok = /кп|коммерческ|расчет|созвон|замер|встреч|что нужно/.test(full);
+    } else {
+      // generic: any presence of keywords from desc (best effort)
+      ok = item.desc ? item.desc.toLowerCase().split(/[,;()]/).some(k => k.trim().length >= 5 && full.includes(k.trim().slice(0,8))) : false;
     }
+
+    flags[item.key] = { ok, points: item.points };
+    if (ok) total += item.points;
   }
-  return "Понял.";
+
+  return { flags, score: { total, max: checklist.reduce((s,i)=>s+i.points,0) } };
 }
 
-// ===== Events =====
-sendBtn.addEventListener("click", onSend);
-inputEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey){
-    e.preventDefault();
-    onSend();
-  }
-});
-
-resetBtn.addEventListener("click", () => resetAll(true));
-exportBtn.addEventListener("click", exportSession);
-
-saveConfigBtn.addEventListener("click", () => {
-  state.config.workerUrl = workerUrlEl.value.trim();
-  state.config.fallbackMode = fallbackModeEl.value;
-  state.config.useLLM = llmToggle.checked;
-  saveConfig();
-  updateUI();
-});
-
-llmToggle.addEventListener("change", () => {
-  state.config.useLLM = llmToggle.checked;
-  saveConfig();
-  updateUI();
-});
-
-async function onSend(){
-  const text = inputEl.value.trim();
-  if (!text) return;
-
-  sendBtn.disabled = true;
-  inputEl.value = "";
-
-  postManagerMessage(text);
-  evaluateManagerMessage(text);
-  state.turns += 1;
-  updateUI();
-
-  try{
-    const { reply, intent, tags } = await getClientReply(text);
-    const tag = tags && tags.length ? `${intent}: ${tags.join(", ")}` : intent;
-    postClientMessage(reply, state.config.useLLM ? tag : "");
-    setStatus(state.config.useLLM ? "good" : null, "Готово");
-  } finally {
-    sendBtn.disabled = false;
-    updateUI();
-  }
-}
-
-function resetAll(withGreeting){
-  state.history = [];
-  state.turns = 0;
-  state.flags = { needDiscovery: false, priceFrame: false, empathy: false, nextStep: false };
-  state.needLevel = 0;
-  state.clientShared = { area: false };
-  clearSession();
-  renderChat();
-  if (withGreeting) postClientMessage(offlineReply("", true));
-  updateUI();
-}
-
-function exportSession(){
-  const data = {
-    scenario: scenario.id,
-    exportedAt: new Date().toISOString(),
-    config: state.config,
-    turns: state.turns,
-    flags: state.flags,
-    history: state.history
+/* ===================== AUTO-SAVE (download or worker) ===================== */
+async function autoSaveResult(state){
+  const result = {
+    sid: state.sid,
+    createdAt: state.session.createdAt,
+    endedAt: state.session.endedAt,
+    scenario: state.session.scenario,
+    manager: state.session.manager,
+    score: state.session.score,
+    flags: state.session.flags,
+    transcript: state.session.transcript
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+
+  if ((state.config.saveMode || "download") === "worker" && state.config.workerUrl){
+    // POST to /save on same worker domain (optional)
+    const base = state.config.workerUrl.replace(/\/$/,"");
+    const saveUrl = base + "/save";
+    try{
+      const res = await fetch(saveUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      toast(data.review_url ? "Сохранено (есть ссылка проверяющему)" : "Сохранено");
+      if (data.review_url) console.log("Review URL:", data.review_url);
+    } catch (e){
+      console.warn(e);
+      // fallback to download
+      downloadJson(result, `result-${state.sid}.json`);
+      toast("Не удалось отправить в Worker — скачано JSON");
+    }
+    return;
+  }
+
+  // default: download
+  downloadJson(result, `result-${state.sid}.json`);
+  toast("Скачано: результат (JSON)");
+}
+
+/* ===================== MANAGER FIO MODAL ===================== */
+function ensureManagerFio(state, managerPill){
+  const existing = (state.session.manager && state.session.manager.fio) ? state.session.manager.fio : "";
+  if (existing){
+    managerPill.textContent = `Менеджер: ${existing}`;
+    return;
+  }
+
+  const modal = byId("modal");
+  const mgrName = byId("mgrName");
+  const mgrOk = byId("mgrOk");
+
+  modal.classList.remove("hidden");
+  mgrName.focus();
+
+  mgrOk.addEventListener("click", () => {
+    const fio = (mgrName.value || "").trim();
+    if (!fio) return;
+    state.session.manager = { fio };
+    saveSession(state.sid, state.session);
+    managerPill.textContent = `Менеджер: ${fio}`;
+    modal.classList.add("hidden");
+  });
+}
+
+/* ===================== SESSION STORAGE ===================== */
+function saveSession(sid, session){
+  const key = `${STORAGE_NS}:session:${sid}`;
+  localStorage.setItem(key, JSON.stringify(session));
+}
+
+function loadSession(sid){
+  const key = `${STORAGE_NS}:session:${sid}`;
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try{ return JSON.parse(raw); } catch { return null; }
+}
+
+function loadConfig(){
+  const raw = localStorage.getItem(`${STORAGE_NS}:config`);
+  if (!raw) return { ...DEFAULT_CONFIG };
+  try{ return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }; } catch { return { ...DEFAULT_CONFIG }; }
+}
+
+function saveConfig(cfg){
+  localStorage.setItem(`${STORAGE_NS}:config`, JSON.stringify({ ...DEFAULT_CONFIG, ...cfg }));
+}
+
+/* ===================== UI HELPERS ===================== */
+function renderChat(chatEl, history){
+  chatEl.innerHTML = "";
+  for (const m of history){
+    appendBubble(chatEl, m.content, m.role === "user" ? "me" : "client");
+  }
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function appendBubble(chatEl, text, who){
+  const row = document.createElement("div");
+  row.className = "msg " + (who === "me" ? "me" : "client");
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  chatEl.appendChild(row);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function renderChecklist(container, checklist, flags){
+  container.innerHTML = "";
+  for (const item of checklist){
+    const ok = flags ? !!flags[item.key]?.ok : null;
+    const badge = ok === null ? "—" : (ok ? `+${item.points}` : "0");
+    const cls = ok === null ? "" : (ok ? "ok" : "no");
+    const row = document.createElement("div");
+    row.className = "checkItem";
+    row.innerHTML = `
+      <div class="checkLeft">
+        <div class="checkTitle">${escapeHtml(item.title)}</div>
+        <div class="checkDesc">${escapeHtml(item.desc)}</div>
+      </div>
+      <div class="badge ${cls}">${badge}</div>
+    `;
+    container.appendChild(row);
+  }
+}
+
+function pushMsg(state, role, content, meta){
+  const m = { role, content, ts: new Date().toISOString() };
+  if (meta) m.meta = meta;
+  state.session.transcript = state.session.transcript || [];
+  state.session.transcript.push(m);
+}
+
+function setStatus(dotEl, textEl, kind, text){
+  dotEl.classList.remove("good","warn","bad");
+  if (kind) dotEl.classList.add(kind);
+  textEl.textContent = text || "Готово";
+}
+
+function setHint(el, text){ el.textContent = text || ""; }
+
+function toast(msg){
+  // minimal: console + status bar could be extended later
+  console.log("[ui]", msg);
+}
+
+function downloadJson(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `session-${scenario.id}.json`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
-// ===== Storage =====
-function loadConfig(){
+function fmtDate(iso){
+  if (!iso) return "—";
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_CONFIG };
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_CONFIG, ...(parsed.config || {}) };
-  } catch {
-    return { ...DEFAULT_CONFIG };
-  }
+    const d = new Date(iso);
+    return d.toLocaleString();
+  } catch { return iso; }
 }
 
-function saveConfig(){
-  const current = loadSession() || {};
-  const payload = { ...current, config: state.config };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+function randomId(n){
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let s = "";
+  for (let i=0;i<n;i++) s += alphabet[Math.floor(Math.random()*alphabet.length)];
+  return s;
 }
 
-function loadSession(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+function toInt(s, def){
+  const x = parseInt(String(s||"").trim(), 10);
+  return Number.isFinite(x) ? x : def;
 }
 
-function saveSession(){
-  const payload = {
-    config: state.config,
-    history: state.history,
-    turns: state.turns,
-    flags: state.flags,
-    needLevel: state.needLevel,
-    clientShared: state.clientShared
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-}
-
-function clearSession(){
-  localStorage.removeItem(STORAGE_KEY);
-}
-
-// ===== Utils =====
+function byId(id){ return document.getElementById(id); }
 function escapeHtml(s){
   return String(s)
     .replaceAll("&","&amp;")

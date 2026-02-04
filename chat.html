@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Тренажёр переписки — чат</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">💬</div>
+      <div>
+        <div class="title">Тренажёр переписки</div>
+        <div class="subtitle">Чат с клиентом (сессия по ссылке)</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="toggle">
+        <input id="llmToggle" type="checkbox" />
+        <span>LLM</span>
+      </label>
+
+      <button id="endBtn" class="btn btn-ghost" type="button">Завершить диалог</button>
+      <button id="resetBtn" class="btn btn-ghost" type="button">Сброс</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card chatCard">
+      <div class="cardHead">
+        <div class="hgroup">
+          <h2 id="scenarioTitle">Сценарий</h2>
+          <div id="scenarioMeta" class="meta"></div>
+        </div>
+        <div class="status">
+          <span class="dot" id="statusDot"></span>
+          <span id="statusText">Готово</span>
+        </div>
+      </div>
+
+      <div id="chat" class="chat" aria-live="polite" aria-label="Чат"></div>
+
+      <div class="composer">
+        <textarea id="input" placeholder="Напишите сообщение клиенту…" rows="3"></textarea>
+        <div class="composerRow">
+          <div class="hint" id="hintText"></div>
+          <button id="sendBtn" class="btn" type="button">Отправить</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <div class="cardHead">
+          <h3>Сессия</h3>
+          <div class="pill" id="managerPill">Менеджер: —</div>
+        </div>
+        <div class="small" id="sessionInfo"></div>
+      </section>
+
+      <section class="card">
+        <div class="cardHead">
+          <h3>Оценка</h3>
+          <div class="pill"><span id="scoreValue">—</span></div>
+        </div>
+        <div class="small">Оценка появится после нажатия “Завершить диалог”.</div>
+        <div id="checklist" class="checklist"></div>
+      </section>
+
+      <section class="card">
+        <div class="cardHead">
+          <h3>Настройка</h3>
+        </div>
+
+        <div class="form">
+          <label class="field">
+            <span>Worker URL</span>
+            <input id="workerUrl" type="text" placeholder="https://xxx.workers.dev" />
+          </label>
+
+          <label class="field">
+            <span>Сохранение результатов</span>
+            <select id="saveMode">
+              <option value="download">Скачать JSON</option>
+              <option value="worker">Отправить в Worker (/save)</option>
+            </select>
+          </label>
+
+          <button id="saveConfigBtn" class="btn btn-ghost" type="button">Сохранить</button>
+
+          <div class="small">
+            Для “Отправить в Worker” нужно добавить маршрут /save в Worker (я дам код) и включить хранилище (KV/D1).
+          </div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modalCard">
+      <h3 class="h3" style="margin-top:0;">Введите ФИО менеджера</h3>
+      <div class="form">
+        <label class="field">
+          <span>ФИО</span>
+          <input id="mgrName" type="text" placeholder="Иванов Иван Иванович" />
+        </label>
+      </div>
+      <div class="row" style="justify-content:flex-end; gap:10px;">
+        <button id="mgrOk" class="btn" type="button">Начать</button>
+      </div>
+      <div class="small">ФИО сохранится для этой сессии.</div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
