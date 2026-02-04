@@ -1,40 +1,98 @@
-/* Sales Simulator v2
-   - index.html: setup page -> creates session link to chat.html?sid=...
-   - chat.html: chat page with manager name prompt, end dialog button reveals scoring
-   - Optional LLM via Worker (YandexGPT or other) using Worker URL
-   - Optional saving: download JSON or POST to Worker /save (if implemented)
+/* sales-sim v3
+   - Setup: objections + rubric blocks (checkbox + points)
+   - Chat: manager FIO modal
+   - End: score shown; includes basic grammar check and "no interrupt" heuristic
 */
 
-const STORAGE_NS = "sales-sim:v2";
-const DEFAULT_CONFIG = {
-  workerUrl: "",
-  useLLM: true,
-  saveMode: "download" // "download" | "worker"
-};
+const STORAGE_NS = "sales-sim:v3";
+const DEFAULT_CONFIG = { workerUrl: "https://royal-breeze-aac8.julya14temina.workers.dev/", useLLM: true, saveMode: "download" };
+
+const RUBRIC_CATALOG = [
+  { block: "Установление контакта", items: [
+    { id:"greeting", label:"Приветствие" },
+    { id:"intro_self", label:"Представление себя" },
+    { id:"intro_company", label:"Представление Компании" },
+    { id:"ask_client_name", label:"Уточнение имени клиента в начале диалога" },
+    { id:"ask_region", label:"Уточняет регион клиента в начале диалога" },
+  ]},
+  { block: "Норма общения", items: [
+    { id:"use_name_3", label:"Использует имя клиента в разговоре 3 и  более раз" },
+    { id:"formatting", label:"Уверенность/ соблюдение норм оформления сообщений в чате" },
+    { id:"initiative", label:"Проявляет инициативу в разговоре" },
+    { id:"grammar", label:"Грамотная деловая речь (проверка грамотности менеджера)" },
+    { id:"no_interrupt", label:"Не перебивает клиента/не говорит одновременно с клиентом" },
+    { id:"active_listen", label:"Использует техники активного слушания" },
+  ]},
+  { block: "Выявление потребностей", items: [
+    { id:"open_questions", label:"Использует открытые вопросы" },
+    { id:"purpose", label:"Уточняет для чего нужен материал (кровля/забор/дача и т.п.)" },
+    { id:"object_type", label:"Уточняет тип объекта (жилой/коммерческий/склад и т.п.)" },
+    { id:"thickness", label:"Определяет толщину металла" },
+    { id:"color", label:"Определяет цвет металла" },
+    { id:"coating", label:"Определяет покрытие (матовое/глянец/цинк и т.п.)" },
+    { id:"shape", label:"Определяет форма/профиль (С-8/С-20 и т.п.)" },
+    { id:"calc_data", label:"Узнает данные для расчета (длина/скат и т..п.)" },
+    { id:"extras", label:"Определяет доборные/сопутствующие, предлагает посчитать" },
+    { id:"summarize", label:"Резюмирует информацию" },
+  ]},
+  { block: "Презентация", items: [
+    { id:"send_whatsapp", label:"Предлагает отправить на WhatsApp фото/счета и др." },
+    { id:"why_product", label:"Объясняет почему предлагает продукт/рекомендованную толщину" },
+    { id:"company_benefits", label:"Проговаривает преимущества компании" },
+    { id:"fit_needs", label:"Презентация соответствует выявленным потребностям" },
+    { id:"present_extras", label:"Презентует доборные/сопутствующие" },
+  ]},
+  { block: "Предзакрытие", items: [
+    { id:"feedback", label:"Берет обратную связь (побуждающий вопрос)" },
+  ]},
+  { block: "Работа с возражениями", items: [
+    { id:"listen_no_interrupt", label:"Выслушал и не перебивал" },
+    { id:"agree_join", label:"Соглашается/присоединяется + уточняет" },
+    { id:"argue", label:"Аргументирует по сути возражения" },
+    { id:"retry_sale", label:"Повторная попытка продажи" },
+  ]},
+  { block: "Закрытие", items: [
+    { id:"next_steps", label:"Рассказывает о дальнейших шагах" },
+    { id:"delivery_or_pickup", label:"Уточняет доставка/самовывоз, адрес доставки" },
+    { id:"crm_data", label:"Уточняет данные для карточки клиента (ФИО, юр/физ)" },
+    { id:"after_chat_whatsapp", label:"После диалога продолжил общение в Whats'app" },
+    { id:"ready_order", label:"Если клиент готов оформить заказ" },
+    { id:"closing_techniques", label:"Использует техники завершения сделки" },
+    { id:"not_ready_order", label:"Если клиент не готов оформить заказ" },
+    { id:"invite_office_or_callback", label:"Пригласил в офис/назначил перезвон" },
+  ]},
+];
 
 document.addEventListener("DOMContentLoaded", () => {
-  const path = (location.pathname || "").toLowerCase();
-  if (path.endsWith("/chat.html") || path.endsWith("chat.html")) initChatPage();
-  else initSetupPage();
+  const p = (location.pathname || "").toLowerCase();
+  if (p.endsWith("chat.html")) initChat();
+  else initSetup();
 });
 
-/* ===================== SETUP PAGE ===================== */
-function initSetupPage(){
-  const createLinkBtn = byId("createLinkBtn");
-  const linkOut = byId("linkOut");
-  const copyBtn = byId("copyBtn");
+/* ---------- Setup ---------- */
+function initSetup(){
+  const btn = byId("createLinkBtn");
+  if (!btn) return;
 
-  if (!createLinkBtn) return;
+  renderRubricBlocks();
 
-  // Prefill example
+  // Defaults
   byId("c_name").value ||= "Андрей";
   byId("c_city").value ||= "Волгоград";
   byId("c_goal").value ||= "понять варианты и цену, не переплатить";
   byId("c_context").value ||= "Частный дом, хочет перекрыть крышу, не разбирается в покрытиях.";
+  byId("c_objections").value ||= "Дорого\nМне нужно подумать\nНе уверен в качестве";
   byId("s_title").value ||= "Кровля: сомнения в цене и выборе покрытия";
 
-  createLinkBtn.addEventListener("click", () => {
-    const session = buildSessionFromForm();
+  for (const cat of RUBRIC_CATALOG){
+    for (const it of cat.items){
+      const cb = byId(`rb_${it.id}`); if (cb) cb.checked = true;
+      const pt = byId(`pt_${it.id}`); if (pt) pt.value = (it.id === "grammar") ? "2" : "1";
+    }
+  }
+
+  btn.addEventListener("click", () => {
+    const session = buildSession();
     const sid = "s_" + randomId(12);
     saveSession(sid, session);
 
@@ -42,218 +100,192 @@ function initSetupPage(){
     url.pathname = url.pathname.replace(/index\.html$/i, "chat.html").replace(/\/$/,"/chat.html");
     url.searchParams.set("sid", sid);
 
-    linkOut.value = url.toString();
-    toast("Ссылка создана");
+    byId("linkOut").value = url.toString();
   });
 
-  copyBtn?.addEventListener("click", async () => {
-    if (!linkOut.value) return;
-    await navigator.clipboard.writeText(linkOut.value);
-    toast("Скопировано");
+  byId("copyBtn")?.addEventListener("click", async () => {
+    const val = byId("linkOut").value;
+    if (!val) return;
+    await navigator.clipboard.writeText(val);
   });
 }
 
-function buildSessionFromForm(){
-  const rubricLines = (byId("rubric").value || "").split("\n").map(s => s.trim()).filter(Boolean);
-  const checklist = rubricLines.map((line, idx) => {
-    const parts = line.split("|").map(p => p.trim());
-    const title = parts[0] || `Пункт ${idx+1}`;
-    const desc = parts[1] || "";
-    const points = toInt(parts[2], 1);
-    return { key: "k" + (idx+1), title, desc, points };
-  });
+function renderRubricBlocks(){
+  const host = byId("rubricBlocks");
+  if (!host) return;
+  host.innerHTML = "";
+
+  for (const cat of RUBRIC_CATALOG){
+    const blk = document.createElement("div");
+    blk.className = "rubricBlock";
+    blk.innerHTML = `<div class="rubricTitle">${escapeHtml(cat.block)}</div>
+                     <div class="rubricHeader"><div>Название</div><div>Баллы</div></div>`;
+    const grid = document.createElement("div");
+    grid.className = "rubricGrid";
+
+    for (const it of cat.items){
+      const item = document.createElement("div");
+      item.className = "rubricItem";
+      item.innerHTML = `<input type="checkbox" id="rb_${it.id}"><label for="rb_${it.id}">${escapeHtml(it.label)}</label>`;
+      const pts = document.createElement("div");
+      pts.className = "rubricPoints";
+      pts.innerHTML = `<input id="pt_${it.id}" type="number" min="0" step="1" value="1">`;
+      grid.appendChild(item);
+      grid.appendChild(pts);
+    }
+
+    blk.appendChild(grid);
+    host.appendChild(blk);
+  }
+}
+
+function buildSession(){
+  const checklist = [];
+  for (const cat of RUBRIC_CATALOG){
+    for (const it of cat.items){
+      if (!byId(`rb_${it.id}`)?.checked) continue;
+      const points = toInt(byId(`pt_${it.id}`)?.value, 1);
+      checklist.push({ key: it.id, block: cat.block, title: it.label, points });
+    }
+  }
+  const objections = (byId("c_objections").value || "").split("\n").map(s=>s.trim()).filter(Boolean);
 
   return {
     createdAt: new Date().toISOString(),
     scenario: {
-      title: byId("s_title").value.trim() || "Сценарий",
+      title: (byId("s_title").value || "").trim() || "Сценарий",
       client: {
-        name: byId("c_name").value.trim() || "Клиент",
-        city: byId("c_city").value.trim() || "",
-        goal: byId("c_goal").value.trim() || "",
+        name: (byId("c_name").value || "").trim() || "Клиент",
+        city: (byId("c_city").value || "").trim(),
+        goal: (byId("c_goal").value || "").trim(),
         tone: byId("c_tone").value,
         delivery: byId("c_delivery").value,
-        context: byId("c_context").value.trim() || ""
+        context: (byId("c_context").value || "").trim(),
+        objections
       },
       checklist
     },
-    config: {
-      ...loadConfig(),
-      useLLM: !!byId("llmDefault").checked
-    },
-    transcript: [], // filled on chat page
+    config: { ...loadConfig(), useLLM: !!byId("llmDefault").checked },
+    transcript: [],
     manager: { fio: "" },
     endedAt: null,
     score: null
   };
 }
 
-/* ===================== CHAT PAGE ===================== */
-function initChatPage(){
+/* ---------- Chat ---------- */
+function initChat(){
   const sid = new URLSearchParams(location.search).get("sid") || "";
   const session = sid ? loadSession(sid) : null;
-
-  // DOM refs
-  const chatEl = byId("chat");
-  const inputEl = byId("input");
-  const sendBtn = byId("sendBtn");
-  const resetBtn = byId("resetBtn");
-  const endBtn = byId("endBtn");
-  const llmToggle = byId("llmToggle");
-  const workerUrlEl = byId("workerUrl");
-  const saveModeEl = byId("saveMode");
-  const saveConfigBtn = byId("saveConfigBtn");
 
   const scenarioTitleEl = byId("scenarioTitle");
   const scenarioMetaEl = byId("scenarioMeta");
   const statusDotEl = byId("statusDot");
   const statusTextEl = byId("statusText");
-  const hintTextEl = byId("hintText");
+  const hintEl = byId("hintText");
+  const chatEl = byId("chat");
+  const inputEl = byId("input");
+  const sendBtn = byId("sendBtn");
+  const endBtn = byId("endBtn");
   const checklistEl = byId("checklist");
-  const scoreValueEl = byId("scoreValue");
-  const managerPill = byId("managerPill");
-  const sessionInfo = byId("sessionInfo");
+  const scoreEl = byId("scoreValue");
+  const managerPill = byId("managerPill"); // optional (removed in v4)
 
-  // basic guard
+  const workerUrlEl = byId("workerUrl");
+  const saveModeEl = byId("saveMode");
+
   if (!session){
     scenarioTitleEl.textContent = "Сессия не найдена";
-    scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки (index.html).";
+    scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки.";
     setStatus(statusDotEl, statusTextEl, "bad", "Нет сессии");
-    disableChat(true);
+    inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true; resetBtn.disabled = true;
     return;
   }
 
-  // state
   const state = {
     sid,
     session,
     config: { ...loadConfig(), ...(session.config || {}) },
-    history: session.transcript || [],  // {role:"user"|"assistant", content, ts}
-    flags: {}, // computed on end
     ended: !!session.endedAt
   };
 
-  // init UI config
-  workerUrlEl.value = state.config.workerUrl || "";
-  llmToggle.checked = !!state.config.useLLM;
-  saveModeEl.value = state.config.saveMode || "download";
+  if (workerUrlEl) workerUrlEl.value = state.config.workerUrl || "";
+  if (saveModeEl) saveModeEl.value = state.config.saveMode || "download";
 
-  // render scenario
-  scenarioTitleEl.textContent = state.session.scenario.title;
-  const c = state.session.scenario.client;
-  scenarioMetaEl.textContent =
-    `Клиент: ${c.name} • ${c.city} • Тон: ${c.tone} • Доставка: ${c.delivery} • Цель: ${c.goal}`;
+  const c = session.scenario.client;
+  scenarioTitleEl.textContent = session.scenario.title;
+  scenarioMetaEl.textContent = `Клиент: ${c.name} • ${c.city} • Тон: ${c.tone} • Доставка: ${c.delivery} • Цель: ${c.goal}`;
 
-  sessionInfo.textContent = `Сессия: ${sid} • Создана: ${fmtDate(state.session.createdAt)}`;
-
-  // render chat
-  renderChat(chatEl, state.history);
-
-  // manager fio modal
+  renderChat(chatEl, session.transcript || []);
   ensureManagerFio(state, managerPill);
 
-  // checklist placeholders (hidden until end)
-  renderChecklist(checklistEl, state.session.scenario.checklist, null);
+  renderChecklist(checklistEl, groupByBlock(session.scenario.checklist || []), null);
+  scoreEl.textContent = "—";
+  setHint(hintEl, "Оценка появится после “Завершить диалог”.");
 
-  // events
-  sendBtn.addEventListener("click", () => onSend(state, chatEl, inputEl, sendBtn, hintTextEl, statusDotEl, statusTextEl));
+  sendBtn.addEventListener("click", () => send(state, chatEl, inputEl, sendBtn, statusDotEl, statusTextEl, hintEl));
   inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); onSend(state, chatEl, inputEl, sendBtn, hintTextEl, statusDotEl, statusTextEl); }
+    if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(state, chatEl, inputEl, sendBtn, statusDotEl, statusTextEl, hintEl); }
   });
 
-  resetBtn.addEventListener("click", () => {
-    state.history = [];
-    state.session.transcript = [];
-    state.session.endedAt = null;
-    state.session.score = null;
-    state.session.flags = null;
-    state.ended = false;
+  const _saveBtn = byId("saveConfigBtn"); if (_saveBtn) _saveBtn.addEventListener("click", () => {
+    state.config.workerUrl = workerUrlEl.value.trim();
+    state.config.useLLM = !!llmToggle.checked;
+    state.config.saveMode = saveModeEl.value;
+    saveConfig(state.config);
+    state.session.config = { ...state.session.config, ...state.config };
     saveSession(state.sid, state.session);
-    renderChat(chatEl, state.history);
-    renderChecklist(checklistEl, state.session.scenario.checklist, null);
-    scoreValueEl.textContent = "—";
-    setHint(hintTextEl, "Напишите первое сообщение клиенту.");
-    setStatus(statusDotEl, statusTextEl, null, "Офлайн/LLM готово");
+  });
+    renderChat(chatEl, []);
+    renderChecklist(checklistEl, groupByBlock(state.session.scenario.checklist||[]), null);
+    scoreEl.textContent = "—";
   });
 
   endBtn.addEventListener("click", async () => {
-    const result = scoreConversation(state.session.scenario.checklist, state.history);
+    const result = scoreConversation(state.session);
     state.session.endedAt = new Date().toISOString();
     state.session.score = result.score;
     state.session.flags = result.flags;
     state.ended = true;
     saveSession(state.sid, state.session);
 
-    // show score now
-    scoreValueEl.textContent = `${result.score.total} баллов`;
-    renderChecklist(checklistEl, state.session.scenario.checklist, result.flags);
-    setHint(hintTextEl, "Диалог завершён. Можно экспортировать результат.");
+    scoreEl.textContent = `${result.score.total} / ${result.score.max}`;
+    renderChecklist(checklistEl, groupByBlock(state.session.scenario.checklist||[]), result.flags);
+    const sm = byId("scoreModal"); if (sm) sm.classList.remove("hidden");
+    const sc = byId("scoreClose"); if (sc) sc.onclick = () => sm.classList.add("hidden");
     setStatus(statusDotEl, statusTextEl, "good", "Завершено");
-
-    // auto-save
     await autoSaveResult(state);
+    // Закрыть окно после завершения
+    setTimeout(() => { try { window.close(); } catch(e) {} }, 300);
   });
 
-  saveConfigBtn.addEventListener("click", () => {
-    state.config.workerUrl = workerUrlEl.value.trim();
-    state.config.useLLM = !!llmToggle.checked;
-    state.config.saveMode = saveModeEl.value;
-    saveConfig(state.config);
-    // also store into session so manager gets same defaults
-    state.session.config = { ...state.session.config, ...state.config };
-    saveSession(state.sid, state.session);
-    toast("Настройки сохранены");
-  });
-
-  llmToggle.addEventListener("change", () => {
-    state.config.useLLM = !!llmToggle.checked;
-    saveConfig(state.config);
-  });
-
-  // initial status/hint
-  if (state.config.useLLM && !state.config.workerUrl){
-    setStatus(statusDotEl, statusTextEl, "warn", "LLM включен, но Worker URL пуст");
-  } else if (state.config.useLLM){
-    setStatus(statusDotEl, statusTextEl, "good", "LLM режим");
-  } else {
-    setStatus(statusDotEl, statusTextEl, null, "Офлайн режим");
-  }
-  setHint(hintTextEl, "Пишите коротко и по делу. Оценка появится после завершения.");
-
-  function disableChat(disabled){
-    inputEl.disabled = disabled;
-    sendBtn.disabled = disabled;
-    endBtn.disabled = disabled;
-    resetBtn.disabled = disabled;
-  }
+  // status
+  if (state.config.useLLM && !state.config.workerUrl) setStatus(statusDotEl, statusTextEl, "warn", "LLM включен, но Worker URL пуст");
+  else if (state.config.useLLM) setStatus(statusDotEl, statusTextEl, "good", "LLM режим");
+  else setStatus(statusDotEl, statusTextEl, null, "Офлайн режим");
 }
 
-async function onSend(state, chatEl, inputEl, sendBtn, hintTextEl, statusDotEl, statusTextEl){
-  const text = (inputEl.value || "").trim();
-  if (!text) return;
-
-  if (state.ended){
-    toast("Диалог уже завершён. Нажмите Сброс, чтобы начать заново.");
-    return;
-  }
+async function send(state, chatEl, inputEl, sendBtn, dotEl, textEl, hintEl){
+  const msg = (inputEl.value || "").trim();
+  if (!msg) return;
+  if (state.ended) return;
 
   sendBtn.disabled = true;
   inputEl.value = "";
 
-  pushMsg(state, "user", text);
-  appendBubble(chatEl, text, "me");
-
-  setStatus(statusDotEl, statusTextEl, "warn", "Клиент печатает…");
+  pushMsg(state.session, "user", msg);
+  appendBubble(chatEl, msg, "me");
+  setStatus(dotEl, textEl, "warn", "Клиент печатает…");
 
   try{
-    const reply = await getClientReply(state, text);
-    pushMsg(state, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
+    const reply = await getClientReply(state, msg);
+    pushMsg(state.session, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
     appendBubble(chatEl, reply.reply, "client");
-    setStatus(statusDotEl, statusTextEl, state.config.useLLM ? "good" : null, "Готово");
-    setHint(hintTextEl, "Продолжайте. По завершению нажмите “Завершить диалог”.");
+    setStatus(dotEl, textEl, state.config.useLLM ? "good" : null, "Готово");
+    setHint(hintEl, "По завершению нажмите “Завершить диалог”.");
   } catch (e){
-    setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
-    setHint(hintTextEl, "Ошибка ответа клиента. Проверьте Worker URL/доступ.");
+    setStatus(dotEl, textEl, "bad", "Ошибка");
+    setHint(hintEl, "Ошибка ответа клиента. Проверьте Worker URL.");
     console.error(e);
   } finally {
     saveSession(state.sid, state.session);
@@ -261,78 +293,152 @@ async function onSend(state, chatEl, inputEl, sendBtn, hintTextEl, statusDotEl, 
   }
 }
 
-/* ===================== LLM / fallback ===================== */
+/* ---------- LLM ---------- */
 async function getClientReply(state, managerMsg){
   if (state.config.useLLM && state.config.workerUrl){
-    return await callWorkerChat(state, managerMsg);
+    const url = state.config.workerUrl.replace(/\/$/,"");
+    const payload = {
+      history: (state.session.transcript||[]).map(m=>({ role:m.role, content:m.content })).slice(-12),
+      scenario: { ...state.session.scenario, manager: state.session.manager, state:{ turns:(state.session.transcript||[]).length } },
+      manager_message: managerMsg
+    };
+    const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    return { reply: String(data.reply||"Уточните, пожалуйста."), intent: String(data.intent||""), tags: Array.isArray(data.tags)?data.tags:[] };
   }
-  // minimal offline fallback: ask to clarify
-  return { reply: "Я не очень понял. Можете объяснить проще?", intent: "offline", tags: ["offline"] };
+  return { reply:"Я не очень понял. Можете объяснить проще?", intent:"offline", tags:["offline"] };
 }
 
-async function callWorkerChat(state, managerMsg){
-  const url = state.config.workerUrl.replace(/\/$/,"");
-  const payload = {
-    history: state.session.transcript.map(m => ({ role: m.role, content: m.content })).slice(-12),
-    scenario: {
-      title: state.session.scenario.title,
-      client: state.session.scenario.client,
-      checklist: state.session.scenario.checklist,
-      manager: state.session.manager,
-      state: {
-        turns: state.session.transcript.length
-      }
-    },
-    manager_message: managerMsg
-  };
+/* ---------- Scoring ---------- */
+function scoreConversation(session){
+  const checklist = session.scenario.checklist || [];
+  const tr = session.transcript || [];
+  const client = session.scenario.client || {};
+  const mgrText = tr.filter(m=>m.role==="user").map(m=>m.content).join("\n");
+  const low = mgrText.toLowerCase();
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+  const name = (client.name||"").trim().toLowerCase();
+  const nameCount = name ? countOcc(low, name) : 0;
+  const qCount = (mgrText.match(/\?/g) || []).length;
 
-  if (!res.ok){
-    const txt = await res.text();
-    throw new Error(txt);
-  }
-  const data = await res.json();
-  return { reply: String(data.reply || "Уточните, пожалуйста."), intent: String(data.intent || ""), tags: Array.isArray(data.tags) ? data.tags : [] };
-}
-
-/* ===================== SCORING (shown only on End) ===================== */
-function scoreConversation(checklist, history){
-  const full = history.filter(m => m.role === "user").map(m => m.content).join("\n").toLowerCase();
+  const interrupt = detectInterrupt(tr);
+  const grammarOk = grammarBusinessOk(mgrText);
+  const formatOk = formattingOk(mgrText);
+  const initiative = /давайте|предлагаю|могу|готов|отправлю|посчитаю|рассчитаю/i.test(low);
+  const activeListen = /понимаю|верно|правильно понял|если я правильно понял|уточню/i.test(low);
+  const whatsapp = /whatsapp|ватсап|вацап|вотсап/i.test(low);
 
   const flags = {};
-  let total = 0;
+  let total = 0, max = 0;
 
-  for (const item of checklist){
-    // lightweight heuristics; can be replaced by LLM-based grading later
+  for (const it of checklist){
+    const pts = toInt(it.points, 1);
+    max += pts;
     let ok = false;
 
-    if (item.title.toLowerCase().includes("выяв")) {
-      const q = (full.match(/\?/g) || []).length;
-      ok = q >= 2 || /площад|м2|скат|срок|бюджет|доставк|адрес/.test(full);
-    } else if (item.title.toLowerCase().includes("цена")) {
-      ok = /толщин|покрыт|цинк|добор|доставк|объем|монтаж|гарант/.test(full);
-    } else if (item.title.toLowerCase().includes("страх") || item.title.toLowerCase().includes("эмпат")) {
-      ok = /понимаю|давайте сравним|без лишн|не перепла/.test(full);
-    } else if (item.title.toLowerCase().includes("следующ")) {
-      ok = /кп|коммерческ|расчет|созвон|замер|встреч|что нужно/.test(full);
-    } else {
-      // generic: any presence of keywords from desc (best effort)
-      ok = item.desc ? item.desc.toLowerCase().split(/[,;()]/).some(k => k.trim().length >= 5 && full.includes(k.trim().slice(0,8))) : false;
+    switch (it.key){
+      case "greeting": ok = /здравств|добрый день|добрый вечер|привет/i.test(low); break;
+      case "intro_self": ok = /меня зовут|я .*менеджер/i.test(low); break;
+      case "intro_company": ok = /компан|мы .* (производ|склад|завод|магазин)/i.test(low); break;
+      case "ask_client_name": ok = /как к вам обращаться|ваше имя|как вас зовут/i.test(low); break;
+      case "ask_region": ok = /какой город|какой регион|откуда вы|ваш город|где находитесь/i.test(low); break;
+
+      case "use_name_3": ok = nameCount >= 3; break;
+      case "formatting": ok = formatOk; break;
+      case "initiative": ok = initiative; break;
+      case "grammar": ok = grammarOk; break;
+      case "no_interrupt": ok = !interrupt; break;
+      case "active_listen": ok = activeListen; break;
+
+      case "open_questions": ok = (qCount >= 2) || (/как|почему|зачем|какой|какая|какие|расскажите|подскажите/i.test(mgrText) && qCount>=1); break;
+      case "purpose": ok = /кровл|крыша|забор|фасад|дач|коттедж|навес/i.test(low) || /для чего.*нуж/i.test(low); break;
+      case "object_type": ok = /жил|коммерч|промышлен|склад|тц|торгов/i.test(low); break;
+      case "thickness": ok = /толщин|\bмм\b/.test(low); break;
+      case "color": ok = /цвет|ral/i.test(low); break;
+      case "coating": ok = /покрыт|матов|глянец|цинк|полиэстер|пурал/i.test(low); break;
+      case "shape": ok = /с-?8|с-?20|с-?21|нс|н-?\d+|геркулес|супермонтеррей|штакетник|евротрапец/i.test(low); break;
+      case "calc_data": ok = /длин|периметр|скат|площад|м2|метр/i.test(low); break;
+      case "extras": ok = /добор|саморез|конек|ендов|планк|уплотн|сопутств/i.test(low); break;
+      case "summarize": ok = /итого|правильно понял|резюмир|подытож/i.test(low); break;
+
+      case "send_whatsapp": ok = whatsapp; break;
+      case "why_product": ok = /рекоменд|лучше|потому что|объясню почему/i.test(low); break;
+      case "company_benefits": ok = /в наличии|быстро|гарант|доставка|цена|качество|сертифик/i.test(low); break;
+      case "fit_needs": ok = /с учетом|исходя из|под ваши|для вашего/i.test(low); break;
+      case "present_extras": ok = /добор|сопутств|комплект/i.test(low); break;
+
+      case "feedback": ok = /как вам|остались вопросы|что скажете|подходит\?/i.test(low); break;
+
+      case "listen_no_interrupt": ok = !interrupt; break;
+      case "agree_join": ok = /понимаю|согласен|логично|конечно/i.test(low) && qCount>=1; break;
+      case "argue": ok = /потому что|объясню|разница|сравним|поэтому/i.test(low); break;
+      case "retry_sale": ok = /давайте оформим|могу посчитать|предлагаю вариант|зафиксируем|оформим/i.test(low); break;
+
+      case "next_steps": ok = /дальше|следующий шаг|отправлю расчет|кп|созвон|замер/i.test(low); break;
+      case "delivery_or_pickup": ok = /доставк|самовывоз|адрес/i.test(low); break;
+      case "crm_data": ok = /фио|юр|физ|инн|кпп|реквизит/i.test(low); break;
+      case "after_chat_whatsapp": ok = whatsapp; break;
+      case "ready_order": ok = /оформим|заказ|счет|оплат/i.test(low); break;
+      case "closing_techniques": ok = /какой вариант|удобнее|сегодня|забронируем|зафиксируем/i.test(low); break;
+      case "not_ready_order": ok = /подумайте|перезвон|как вам будет удобно/i.test(low); break;
+      case "invite_office_or_callback": ok = /офис|встреч|перезвон|созвон/i.test(low); break;
+      default: ok = false;
     }
 
-    flags[item.key] = { ok, points: item.points };
-    if (ok) total += item.points;
+    flags[it.key] = { ok, points: pts, block: it.block, title: it.title };
+    if (ok) total += pts;
   }
 
-  return { flags, score: { total, max: checklist.reduce((s,i)=>s+i.points,0) } };
+  return { flags, score: { total, max } };
 }
 
-/* ===================== AUTO-SAVE (download or worker) ===================== */
+function detectInterrupt(tr){
+  let lastUserTs = null;
+  let streak = 0;
+  for (const m of tr){
+    if (m.role === "user"){
+      const t = Date.parse(m.ts || "");
+      if (Number.isFinite(t) && lastUserTs !== null && (t - lastUserTs) <= 4000){
+        streak += 1;
+      } else {
+        streak = 1;
+      }
+      lastUserTs = t;
+      if (streak >= 2) return true;
+    } else {
+      streak = 0;
+      lastUserTs = null;
+    }
+  }
+  return false;
+}
+
+function formattingOk(text){
+  const t = String(text || "");
+  if (!t) return false;
+  const ex = (t.match(/!/g) || []).length;
+  const caps = (t.match(/\b[А-ЯЁ]{4,}\b/g) || []).length;
+  const emojis = (t.match(/[\u{1F300}-\u{1FAFF}]/gu) || []).length;
+  if (ex >= 6) return false;
+  if (caps >= 2) return false;
+  if (emojis >= 6) return false;
+  return true;
+}
+
+function grammarBusinessOk(text){
+  const t = String(text || "");
+  if (!t) return false;
+  const low = t.toLowerCase();
+  const typos = ["граммот","пожайлуста","здела","пожалуйсто","извен","вообщем","прийд","ложить","ихний","нету"];
+  let bad = 0;
+  for (const w of typos) if (low.includes(w)) bad++;
+  if (/(!!+|\?\?+|\.{4,}|,,+)/.test(t)) bad++;
+  if (t.length >= 120 && /[,.!?][А-Яа-яЁё]/.test(t)) bad++;
+  return bad <= 1;
+}
+
+/* ---------- Saving ---------- */
 async function autoSaveResult(state){
   const result = {
     sid: state.sid,
@@ -344,177 +450,152 @@ async function autoSaveResult(state){
     flags: state.session.flags,
     transcript: state.session.transcript
   };
-
   if ((state.config.saveMode || "download") === "worker" && state.config.workerUrl){
-    // POST to /save on same worker domain (optional)
     const base = state.config.workerUrl.replace(/\/$/,"");
     const saveUrl = base + "/save";
     try{
-      const res = await fetch(saveUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(result)
-      });
+      const res = await fetch(saveUrl, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(result) });
       if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      toast(data.review_url ? "Сохранено (есть ссылка проверяющему)" : "Сохранено");
-      if (data.review_url) console.log("Review URL:", data.review_url);
+      return;
     } catch (e){
-      console.warn(e);
-      // fallback to download
       downloadJson(result, `result-${state.sid}.json`);
-      toast("Не удалось отправить в Worker — скачано JSON");
+      return;
     }
-    return;
   }
-
-  // default: download
   downloadJson(result, `result-${state.sid}.json`);
-  toast("Скачано: результат (JSON)");
 }
 
-/* ===================== MANAGER FIO MODAL ===================== */
-function ensureManagerFio(state, managerPill){
-  const existing = (state.session.manager && state.session.manager.fio) ? state.session.manager.fio : "";
-  if (existing){
-    managerPill.textContent = `Менеджер: ${existing}`;
-    return;
+
+async function startClientFirstMessage(state){
+  try{
+    const tr = state.session.transcript || [];
+    if (tr.length > 0) return; // already started
+    // Ask model to start the conversation as the client
+    const res = await getClientReply(state, "Начни диалог первым сообщением от клиента.");
+    pushMsg(state.session, "assistant", res.reply, { intent: res.intent, tags: res.tags });
+    const chatEl = document.getElementById("chat");
+    if (chatEl) appendBubble(chatEl, res.reply, "client");
+    saveSession(state.sid, state.session);
+  } catch (e){
+    // fallback without LLM
+    const c = state.session.scenario?.client || {};
+    const fallback = `Здравствуйте! Меня зовут ${c.name || "клиент"}. Я из ${c.city || "вашего города"}. ${c.goal ? "Хочу " + c.goal + "." : ""} ${c.context || ""}`.trim();
+    pushMsg(state.session, "assistant", fallback, { intent: "start_fallback", tags: ["start_fallback"] });
+    const chatEl = document.getElementById("chat");
+    if (chatEl) appendBubble(chatEl, fallback, "client");
+    saveSession(state.sid, state.session);
   }
+}
 
+/* ---------- Modal ---------- */
+function ensureManagerFio(state, pill){
+  const existing = state.session.manager?.fio || "";
+  if (existing){ if (pill) pill.textContent = `Менеджер: ${existing}`; return; }
   const modal = byId("modal");
-  const mgrName = byId("mgrName");
-  const mgrOk = byId("mgrOk");
-
+  const input = byId("mgrName");
+  const ok = byId("mgrOk");
   modal.classList.remove("hidden");
-  mgrName.focus();
-
-  mgrOk.addEventListener("click", () => {
-    const fio = (mgrName.value || "").trim();
+  input.focus();
+  ok.addEventListener("click", () => {
+    const fio = (input.value || "").trim();
     if (!fio) return;
     state.session.manager = { fio };
     saveSession(state.sid, state.session);
-    managerPill.textContent = `Менеджер: ${fio}`;
+    if (pill) pill.textContent = `Менеджер: ${fio}`;
     modal.classList.add("hidden");
+    // авто-старт: клиент пишет первым
+    startClientFirstMessage(state);
+
   });
 }
 
-/* ===================== SESSION STORAGE ===================== */
-function saveSession(sid, session){
-  const key = `${STORAGE_NS}:session:${sid}`;
-  localStorage.setItem(key, JSON.stringify(session));
+/* ---------- UI helpers ---------- */
+function renderChat(chatEl, tr){
+  chatEl.innerHTML = "";
+  for (const m of (tr||[])) appendBubble(chatEl, m.content, m.role==="user" ? "me" : "client");
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+function appendBubble(chatEl, text, who){
+  const row = document.createElement("div");
+  row.className = "msg " + (who==="me" ? "me" : "client");
+  const b = document.createElement("div");
+  b.className = "bubble";
+  b.textContent = text;
+  row.appendChild(b);
+  chatEl.appendChild(row);
+}
+function renderChecklist(container, grouped, flags){
+  container.innerHTML = "";
+  for (const block of Object.keys(grouped||{})){
+    const h = document.createElement("div");
+    h.className = "small";
+    h.style.padding = "10px 14px 0";
+    h.style.fontWeight = "750";
+    h.textContent = block;
+    container.appendChild(h);
+
+    for (const it of grouped[block]){
+      const f = flags ? flags[it.key] : null;
+      const ok = f ? !!f.ok : null;
+      const badge = ok === null ? "—" : (ok ? `+${it.points}` : "0");
+      const cls = ok === null ? "" : (ok ? "ok" : "no");
+
+      const row = document.createElement("div");
+      row.className = "checkItem";
+      row.innerHTML = `
+        <div class="checkLeft"><div class="checkTitle">${escapeHtml(it.title)}</div></div>
+        <div class="badge ${cls}">${badge}</div>
+      `;
+      container.appendChild(row);
+    }
+  }
+}
+function groupByBlock(list){
+  const out = {};
+  for (const it of (list||[])){
+    (out[it.block] ||= []).push(it);
+  }
+  return out;
+}
+function pushMsg(session, role, content, meta){
+  const m = { role, content, ts: new Date().toISOString() };
+  if (meta) m.meta = meta;
+  session.transcript ||= [];
+  session.transcript.push(m);
+}
+function setStatus(dot, text, kind, label){
+  dot.classList.remove("good","warn","bad");
+  if (kind) dot.classList.add(kind);
+  text.textContent = label || "Готово";
+}
+function setHint(el, t){ el.textContent = t || ""; }
+
+function downloadJson(obj, name){
+  const blob = new Blob([JSON.stringify(obj,null,2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
+/* ---------- Storage ---------- */
+function saveSession(sid, session){ localStorage.setItem(`${STORAGE_NS}:session:${sid}`, JSON.stringify(session)); }
 function loadSession(sid){
-  const key = `${STORAGE_NS}:session:${sid}`;
-  const raw = localStorage.getItem(key);
+  const raw = localStorage.getItem(`${STORAGE_NS}:session:${sid}`);
   if (!raw) return null;
   try{ return JSON.parse(raw); } catch { return null; }
 }
-
 function loadConfig(){
   const raw = localStorage.getItem(`${STORAGE_NS}:config`);
   if (!raw) return { ...DEFAULT_CONFIG };
   try{ return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }; } catch { return { ...DEFAULT_CONFIG }; }
 }
+function saveConfig(cfg){ localStorage.setItem(`${STORAGE_NS}:config`, JSON.stringify({ ...DEFAULT_CONFIG, ...cfg })); }
 
-function saveConfig(cfg){
-  localStorage.setItem(`${STORAGE_NS}:config`, JSON.stringify({ ...DEFAULT_CONFIG, ...cfg }));
-}
-
-/* ===================== UI HELPERS ===================== */
-function renderChat(chatEl, history){
-  chatEl.innerHTML = "";
-  for (const m of history){
-    appendBubble(chatEl, m.content, m.role === "user" ? "me" : "client");
-  }
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
-
-function appendBubble(chatEl, text, who){
-  const row = document.createElement("div");
-  row.className = "msg " + (who === "me" ? "me" : "client");
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  bubble.textContent = text;
-  row.appendChild(bubble);
-  chatEl.appendChild(row);
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
-
-function renderChecklist(container, checklist, flags){
-  container.innerHTML = "";
-  for (const item of checklist){
-    const ok = flags ? !!flags[item.key]?.ok : null;
-    const badge = ok === null ? "—" : (ok ? `+${item.points}` : "0");
-    const cls = ok === null ? "" : (ok ? "ok" : "no");
-    const row = document.createElement("div");
-    row.className = "checkItem";
-    row.innerHTML = `
-      <div class="checkLeft">
-        <div class="checkTitle">${escapeHtml(item.title)}</div>
-        <div class="checkDesc">${escapeHtml(item.desc)}</div>
-      </div>
-      <div class="badge ${cls}">${badge}</div>
-    `;
-    container.appendChild(row);
-  }
-}
-
-function pushMsg(state, role, content, meta){
-  const m = { role, content, ts: new Date().toISOString() };
-  if (meta) m.meta = meta;
-  state.session.transcript = state.session.transcript || [];
-  state.session.transcript.push(m);
-}
-
-function setStatus(dotEl, textEl, kind, text){
-  dotEl.classList.remove("good","warn","bad");
-  if (kind) dotEl.classList.add(kind);
-  textEl.textContent = text || "Готово";
-}
-
-function setHint(el, text){ el.textContent = text || ""; }
-
-function toast(msg){
-  // minimal: console + status bar could be extended later
-  console.log("[ui]", msg);
-}
-
-function downloadJson(obj, filename){
-  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function fmtDate(iso){
-  if (!iso) return "—";
-  try{
-    const d = new Date(iso);
-    return d.toLocaleString();
-  } catch { return iso; }
-}
-
-function randomId(n){
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let s = "";
-  for (let i=0;i<n;i++) s += alphabet[Math.floor(Math.random()*alphabet.length)];
-  return s;
-}
-
-function toInt(s, def){
-  const x = parseInt(String(s||"").trim(), 10);
-  return Number.isFinite(x) ? x : def;
-}
-
+/* ---------- Utils ---------- */
 function byId(id){ return document.getElementById(id); }
-function escapeHtml(s){
-  return String(s)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
+function toInt(s, d){ const x = parseInt(String(s||"").trim(),10); return Number.isFinite(x)?x:d; }
+function randomId(n){ const a="abcdefghijklmnopqrstuvwxyz0123456789"; let s=""; for (let i=0;i<n;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
+function countOcc(text, sub){ let n=0,i=0; while(true){ i=text.indexOf(sub,i); if(i===-1) break; n++; i+=sub.length; } return n; }
+function escapeHtml(s){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }

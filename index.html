@@ -56,41 +56,37 @@
             <label class="field"><span>Контекст (1–2 предложения)</span>
               <textarea id="c_context" rows="3" placeholder="Частный дом, хочет перекрыть крышу, не разбирается в покрытиях."></textarea>
             </label>
+            <label class="field"><span>Возражения (по одному на строку)</span>
+              <textarea id="c_objections" rows="5" placeholder="Дорого
+Мне нужно подумать
+Не уверен в качестве"></textarea>
+            </label>
+            <div class="small">Возражения будут передаваться модели и могут появляться в диалоге.</div>
           </div>
         </div>
 
         <div class="cardInner">
           <h3 class="h3">Оценка диалога</h3>
-          <div class="meta" style="margin-bottom:10px;">Оценка показывается менеджеру только после “Завершить диалог”.</div>
+          <div class="meta" style="margin-bottom:10px;">Выберите пункты (галочками) и задайте баллы. Оценка показывается менеджеру только после “Завершить диалог”.</div>
 
-          <div class="form">
-            <label class="field">
-              <span>Пункты оценки (по одному на строку: “Название | описание | баллы”)</span>
-              <textarea id="rubric" rows="10">Выявление потребностей | Задать 2+ уточняющих вопроса: площадь/геометрия, сроки, бюджет, доставка. | 3
-Объяснить от чего зависит цена | Толщина, покрытие, объем, доборные, доставка/монтаж. | 3
-Снять страх переплаты | Эмпатия + сравнение 2–3 вариантов. | 2
-Следующий шаг | КП/созвон/замер и что нужно для расчёта. | 2</textarea>
-            </label>
+          <div id="rubricBlocks" class="rubricBlocks"></div>
 
+          <div class="form" style="margin-top:10px;">
             <label class="field">
               <span>Заголовок сценария</span>
               <input id="s_title" type="text" placeholder="Кровля: сомнения в цене и выборе покрытия" />
             </label>
 
-            <div class="row" style="justify-content:flex-start;">
+            <div class="row" style="justify-content:flex-start; padding:0;">
               <label class="toggle"><input id="llmDefault" type="checkbox" checked /><span>LLM включён по умолчанию</span></label>
-            </div>
-
-            <div class="small">
-              Примечание: ссылка содержит только идентификатор сессии. Данные хранятся в браузере создателя и/или отправляются в Worker при сохранении (если включите).
             </div>
           </div>
         </div>
       </div>
 
-      <div class="cardInner" style="margin-top:12px;">
+      <div class="cardInner" style="margin:12px 14px 14px;">
         <h3 class="h3">Ссылка для менеджера</h3>
-        <div class="row" style="gap:10px;">
+        <div class="row" style="gap:10px; padding:0;">
           <input id="linkOut" type="text" class="linkOut" placeholder="Нажмите “Создать ссылку”" readonly />
           <button id="copyBtn" class="btn btn-ghost" type="button">Копировать</button>
         </div>

@@ -17,17 +17,11 @@
     </div>
 
     <div class="controls">
-      <label class="toggle">
-        <input id="llmToggle" type="checkbox" />
-        <span>LLM</span>
-      </label>
-
       <button id="endBtn" class="btn btn-ghost" type="button">Завершить диалог</button>
-      <button id="resetBtn" class="btn btn-ghost" type="button">Сброс</button>
     </div>
   </header>
 
-  <main class="layout">
+  <main class="layout" style="grid-template-columns: 1fr; max-width: 980px;">
     <section class="card chatCard">
       <div class="cardHead">
         <div class="hgroup">
@@ -50,52 +44,6 @@
         </div>
       </div>
     </section>
-
-    <aside class="side">
-      <section class="card">
-        <div class="cardHead">
-          <h3>Сессия</h3>
-          <div class="pill" id="managerPill">Менеджер: —</div>
-        </div>
-        <div class="small" id="sessionInfo"></div>
-      </section>
-
-      <section class="card">
-        <div class="cardHead">
-          <h3>Оценка</h3>
-          <div class="pill"><span id="scoreValue">—</span></div>
-        </div>
-        <div class="small">Оценка появится после нажатия “Завершить диалог”.</div>
-        <div id="checklist" class="checklist"></div>
-      </section>
-
-      <section class="card">
-        <div class="cardHead">
-          <h3>Настройка</h3>
-        </div>
-
-        <div class="form">
-          <label class="field">
-            <span>Worker URL</span>
-            <input id="workerUrl" type="text" placeholder="https://xxx.workers.dev" />
-          </label>
-
-          <label class="field">
-            <span>Сохранение результатов</span>
-            <select id="saveMode">
-              <option value="download">Скачать JSON</option>
-              <option value="worker">Отправить в Worker (/save)</option>
-            </select>
-          </label>
-
-          <button id="saveConfigBtn" class="btn btn-ghost" type="button">Сохранить</button>
-
-          <div class="small">
-            Для “Отправить в Worker” нужно добавить маршрут /save в Worker (я дам код) и включить хранилище (KV/D1).
-          </div>
-        </div>
-      </section>
-    </aside>
   </main>
 
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
@@ -107,12 +55,26 @@
           <input id="mgrName" type="text" placeholder="Иванов Иван Иванович" />
         </label>
       </div>
-      <div class="row" style="justify-content:flex-end; gap:10px;">
+      <div class="row" style="justify-content:flex-end; gap:10px; padding:0;">
         <button id="mgrOk" class="btn" type="button">Начать</button>
       </div>
       <div class="small">ФИО сохранится для этой сессии.</div>
     </div>
   </div>
+
+
+  <div id="scoreModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modalCard">
+      <h3 class="h3" style="margin-top:0;">Оценка диалога</h3>
+      <div class="row" style="justify-content:space-between; padding:0;">
+        <div class="pill">Итог: <span id="scoreValue">—</span></div>
+        <button id="scoreClose" class="btn btn-ghost" type="button">Закрыть</button>
+      </div>
+      <div id="checklist" class="checklist" style="padding-top:12px;"></div>
+      <div class="small">Результат автоматически сохранится после завершения.</div>
+    </div>
+  </div>
+
 
   <script src="./app.js"></script>
 </body>
