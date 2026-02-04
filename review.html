@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Просмотр результатов</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .grid{display:grid;grid-template-columns:340px 1fr;gap:14px;max-width:1200px;margin:0 auto;padding:14px}
+    .list{max-height:80vh;overflow:auto}
+    .item{padding:10px;border:1px solid var(--line);border-radius:12px;cursor:pointer;margin-bottom:8px}
+    .item:hover{opacity:.9}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">🗂️</div>
+      <div>
+        <div class="title">Просмотр диалогов</div>
+        <div class="subtitle">Cloudflare KV</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <div class="cardHead">
+        <div class="hgroup">
+          <h2>Доступ</h2>
+          <div class="meta">Токен нужен только для просмотра</div>
+        </div>
+      </div>
+      <div class="form">
+        <label class="field">
+          <span>Worker base URL</span>
+          <input id="base" value="https://royal-breeze-aac8.julya14temina.workers.dev" />
+        </label>
+        <label class="field">
+          <span>Token</span>
+          <input id="token" placeholder="REVIEW_TOKEN" />
+        </label>
+        <button id="load" class="btn" type="button">Загрузить список</button>
+      </div>
+
+      <div class="list" id="keys"></div>
+    </section>
+
+    <section class="card">
+      <div class="cardHead">
+        <div class="hgroup">
+          <h2 id="title">Выберите диалог слева</h2>
+          <div id="meta" class="meta"></div>
+        </div>
+      </div>
+
+      <div id="chat" class="chat"></div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="hgroup">
+          <h3 class="h3">Оценка</h3>
+          <div class="meta" id="score">—</div>
+        </div>
+        <div id="rubric" class="checklist"></div>
+      </div>
+    </section>
+  </div>
+
+<script>
+  const byId = (id)=>document.getElementById(id);
+
+  byId("load").onclick = async ()=>{
+    const base = byId("base").value.replace(/\/$/,"");
+    const token = byId("token").value.trim();
+    const r = await fetch(base + "/list", { headers: { "X-Token": token } });
+    if(!r.ok){ alert(await r.text()); return; }
+    const keys = await r.json();
+    renderKeys(keys, base, token);
+  };
+
+  function renderKeys(keys, base, token){
+    const host = byId("keys");
+    host.innerHTML = "";
+    keys.reverse().forEach(k=>{
+      const d = document.createElement("div");
+      d.className = "item";
+      d.textContent = k.name;
+      d.onclick = ()=>loadOne(base, token, k.name);
+      host.appendChild(d);
+    });
+  }
+
+  async function loadOne(base, token, key){
+    const r = await fetch(base + "/get?key=" + encodeURIComponent(key), { headers: { "X-Token": token } });
+    if(!r.ok){ alert(await r.text()); return; }
+    const data = await r.json();
+    render(data);
+  }
+
+  function render(data){
+    byId("title").textContent = data.scenario?.title || "Диалог";
+    const m = data.manager?.fio ? `Менеджер: ${data.manager.fio}` : "";
+    const c = data.scenario?.client?.name ? `Клиент: ${data.scenario.client.name}` : "";
+    const t = data.endedAt ? `Завершено: ${data.endedAt}` : "";
+    byId("meta").textContent = [m,c,t].filter(Boolean).join(" • ");
+
+    const s = data.score ? `${data.score.total} / ${data.score.max}` : "—";
+    byId("score").textContent = s;
+
+    const chat = byId("chat");
+    chat.innerHTML = "";
+    (data.transcript||[]).forEach(x=>{
+      const row = document.createElement("div");
+      row.className = "msg " + (x.role==="user" ? "me" : "client");
+      const b = document.createElement("div");
+      b.className = "bubble";
+      b.textContent = x.content || "";
+      row.appendChild(b);
+      chat.appendChild(row);
+    });
+
+    const rubric = byId("rubric");
+    rubric.innerHTML = "";
+    const list = data.scenario?.checklist || [];
+    const flags = data.flags || {};
+    list.forEach(it=>{
+      const f = flags[it.key] || {};
+      const ok = !!f.ok;
+      const row = document.createElement("div");
+      row.className = "checkItem";
+      row.innerHTML = `<div class="checkLeft"><div class="checkTitle">${it.title}</div></div>
+                       <div class="badge ${ok ? "ok":"no"}">${ok ? "+"+it.points : "0"}</div>`;
+      rubric.appendChild(row);
+    });
+  }
+</script>
+</body>
+</html>
