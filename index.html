@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Тренажёр переписки — гибрид (сценарий + LLM)</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">💬</div>
+      <div>
+        <div class="title">Тренажёр переписки</div>
+        <div class="subtitle">Гибрид: сценарий задаёт рамки и оценку, LLM формулирует ответы клиента (через serverless)</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="toggle">
+        <input id="llmToggle" type="checkbox" />
+        <span>LLM</span>
+      </label>
+
+      <button id="resetBtn" class="btn btn-ghost" type="button">Сброс</button>
+      <button id="exportBtn" class="btn btn-ghost" type="button">Экспорт</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card chatCard">
+      <div class="cardHead">
+        <div class="hgroup">
+          <h2 id="scenarioTitle">Сценарий</h2>
+          <div id="scenarioMeta" class="meta"></div>
+        </div>
+        <div class="status">
+          <span class="dot" id="statusDot"></span>
+          <span id="statusText">Готово</span>
+        </div>
+      </div>
+
+      <div id="chat" class="chat" aria-live="polite" aria-label="Чат"></div>
+
+      <div class="composer">
+        <textarea id="input" placeholder="Напишите сообщение клиенту…" rows="3"></textarea>
+        <div class="composerRow">
+          <div class="hint" id="hintText"></div>
+          <button id="sendBtn" class="btn" type="button">Отправить</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <div class="cardHead">
+          <h3>Оценка</h3>
+          <div class="pill"><span id="scoreValue">0</span> баллов</div>
+        </div>
+
+        <div id="checklist" class="checklist"></div>
+
+        <div class="small">
+          Подсказка: цель — выяснить параметры, снять страх переплаты, предложить следующий шаг (КП/созвон/замер).
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="cardHead">
+          <h3>Настройка</h3>
+        </div>
+
+        <div class="form">
+          <label class="field">
+            <span>Worker URL (serverless прокси)</span>
+            <input id="workerUrl" type="text" placeholder="https://xxx.workers.dev" />
+          </label>
+
+          <label class="field">
+            <span>Режим ответа без LLM</span>
+            <select id="fallbackMode">
+              <option value="rules">Сценарные правила</option>
+              <option value="random">Сценарий + вариативность</option>
+            </select>
+          </label>
+
+          <button id="saveConfigBtn" class="btn btn-ghost" type="button">Сохранить</button>
+
+          <div class="small">
+            Включайте LLM только когда Worker URL настроен. Иначе будет работать офлайн-режим.
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="cardHead">
+          <h3>Как запустить</h3>
+        </div>
+        <ol class="small">
+          <li>Откройте <code>index.html</code> локально (для теста).</li>
+          <li>Для публикации — загрузите 3 файла в репозиторий и включите GitHub Pages.</li>
+          <li>Для LLM — создайте serverless Worker и вставьте URL в настройку выше.</li>
+        </ol>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer small">
+    Локальные данные (настройки/история) сохраняются в браузере.
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
