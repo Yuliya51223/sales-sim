@@ -220,6 +220,8 @@ function initChat(){
 
   renderChat(chatEl, session.transcript || []);
   ensureManagerFio(state, managerPill);
+  // если ФИО уже сохранено (повторный вход) — клиент стартует сам
+  if ((state.session.manager && state.session.manager.fio) && ((state.session.transcript||[]).length===0)) { startClientFirstMessage(state); }
 
   renderChecklist(checklistEl, groupByBlock(session.scenario.checklist || []), null);
   scoreEl.textContent = "—";
@@ -296,8 +298,8 @@ async function send(state, chatEl, inputEl, sendBtn, dotEl, textEl, hintEl){
 }
 
 /* ---------- LLM ---------- */
-async function getClientReply(state, managerMsg){
-  if (state.config.useLLM && state.config.workerUrl){
+async function getClientReply(state, managerMsg, forceLLM=false){
+  if ((forceLLM || state.config.useLLM) && state.config.workerUrl){
     const url = state.config.workerUrl.replace(/\/$/,"");
     const payload = {
       history: (state.session.transcript||[]).map(m=>({ role:m.role, content:m.content })).slice(-12),
@@ -469,18 +471,20 @@ async function autoSaveResult(state){
 
 
 async function startClientFirstMessage(state){
+  const tr = state.session.transcript || [];
+  if (tr.length > 0) return;
+
+  const c = state.session.scenario?.client || {};
+  const objections = Array.isArray(c.objections) && c.objections.length ? (" Возможные возражения: " + c.objections.join("; ") + ".") : "";
+  const prompt = `Сгенерируй первое сообщение от клиента для начала переписки. Данные клиента: имя=${c.name||""}, город=${c.city||""}, цель=${c.goal||""}, тон=${c.tone||""}, доставка=${c.delivery||""}. Контекст: ${c.context||""}.${objections} Пиши как реальный покупатель, 1-3 предложения.`;
+
   try{
-    const tr = state.session.transcript || [];
-    if (tr.length > 0) return; // already started
-    // Ask model to start the conversation as the client
-    const res = await getClientReply(state, "Начни диалог первым сообщением от клиента.");
+    const res = await getClientReply(state, prompt, true);
     pushMsg(state.session, "assistant", res.reply, { intent: res.intent, tags: res.tags });
     const chatEl = document.getElementById("chat");
     if (chatEl) appendBubble(chatEl, res.reply, "client");
     saveSession(state.sid, state.session);
   } catch (e){
-    // fallback without LLM
-    const c = state.session.scenario?.client || {};
     const fallback = `Здравствуйте! Меня зовут ${c.name || "клиент"}. Я из ${c.city || "вашего города"}. ${c.goal ? "Хочу " + c.goal + "." : ""} ${c.context || ""}`.trim();
     pushMsg(state.session, "assistant", fallback, { intent: "start_fallback", tags: ["start_fallback"] });
     const chatEl = document.getElementById("chat");
