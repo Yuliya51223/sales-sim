@@ -243,7 +243,7 @@ function initChat(){
     renderChat(chatEl, []);
     renderChecklist(checklistEl, groupByBlock(state.session.scenario.checklist||[]), null);
     scoreEl.textContent = "—";
-  });
+  };
 
   endBtn.addEventListener("click", async () => {
     const result = scoreConversation(state.session);
@@ -267,7 +267,7 @@ function initChat(){
   if (state.config.useLLM && !state.config.workerUrl) setStatus(statusDotEl, statusTextEl, "warn", "LLM включен, но Worker URL пуст");
   else if (state.config.useLLM) setStatus(statusDotEl, statusTextEl, "good", "LLM режим");
   else setStatus(statusDotEl, statusTextEl, null, "Офлайн режим");
-}
+
 
 async function send(state, chatEl, inputEl, sendBtn, dotEl, textEl, hintEl){
   const msg = (inputEl.value || "").trim();
