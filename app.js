@@ -192,8 +192,6 @@ function initChat(){
 
   const state = { sid, session, ended: !!session.endedAt };
 
-  window.__salesSimState = state;
-
   const c = session.scenario.client;
   scenarioTitleEl.textContent = session.scenario.title;
   scenarioMetaEl.textContent = `Клиент: ${c.name} • ${c.city} • Тон: ${c.tone} • Доставка: ${c.delivery} • Цель: ${c.goal}`;
@@ -256,16 +254,12 @@ function initChat(){
 }
 
 function ensureManagerFio(state){
-  const st = state || window.__salesSimState;
-  if (!st || !st.session) return;
-
-  const existing = st.session.manager?.fio || "";
+  const existing = state.session.manager?.fio || "";
   if (existing) return;
 
   const modal = byId("fioModal");
   const nameEl = byId("mgrName");
   const okBtn = byId("mgrOk");
-  if (!modal || !nameEl || !okBtn) return;
 
   modal.classList.remove("hidden");
   nameEl.focus();
@@ -273,10 +267,10 @@ function ensureManagerFio(state){
   okBtn.onclick = () => {
     const fio = (nameEl.value || "").trim();
     if (!fio) return;
-    st.session.manager = { fio };
-    saveSession(st.sid, st.session);
+    state.session.manager = { fio };
+    saveSession(state.sid, state.session);
     modal.classList.add("hidden");
-    startClientFirstMessage(st);
+    startClientFirstMessage(state);
   };
 }
 
