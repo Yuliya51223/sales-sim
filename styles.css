@@ -280,3 +280,15 @@ textarea:focus{ border-color: rgba(255,255,255,.35); }
 @media (max-width: 980px){
   .setupGrid{ grid-template-columns: 1fr; }
 }
+
+
+/* Score modal scrolling */
+#scoreModal .modalCard{
+  max-height: 86vh;
+  overflow: hidden;
+}
+#scoreModal #checklist{
+  max-height: 62vh;
+  overflow: auto;
+  padding-right: 6px;
+}
