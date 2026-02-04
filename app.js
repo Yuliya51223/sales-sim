@@ -1,12 +1,13 @@
-/* sales-sim v3
-   - Setup: objections + rubric blocks (checkbox + points)
-   - Chat: manager FIO modal
-   - End: score shown; includes basic grammar check and "no interrupt" heuristic
+/* sales-sim v10
+   Worker URL: https://royal-breeze-aac8.julya14temina.workers.dev
+   - клиент пишет первым по настройкам
+   - оценка показывается после "Завершить диалог"
+   - результат (диалог + оценка) отправляется на Worker /save (Cloudflare KV/D1) с fallback на скачивание
 */
 
-const STORAGE_NS = "sales-sim:v3";
-const DEFAULT_CONFIG = { workerUrl: "https://royal-breeze-aac8.julya14temina.workers.dev/", useLLM: true, saveMode: "download" };
+const WORKER_URL = "https://royal-breeze-aac8.julya14temina.workers.dev";
 
+const STORAGE_NS = "sales-sim:v10";
 
 const RUBRIC_CATALOG = [
   { block: "Установление контакта", items: [
@@ -64,7 +65,6 @@ const RUBRIC_CATALOG = [
   ]}
 ];
 
-
 document.addEventListener("DOMContentLoaded", () => {
   const p = (location.pathname || "").toLowerCase();
   if (p.endsWith("chat.html")) initChat();
@@ -78,18 +78,12 @@ function initSetup(){
 
   renderRubricBlocks();
 
-  // Defaults
-  byId("c_name").value ||= "Андрей";
-  byId("c_city").value ||= "Волгоград";
-  byId("c_goal").value ||= "понять варианты и цену, не переплатить";
-  byId("c_context").value ||= "Частный дом, хочет перекрыть крышу, не разбирается в покрытиях.";
-  byId("c_objections").value ||= "Дорого\nМне нужно подумать\nНе уверен в качестве";
-  byId("s_title").value ||= "Кровля: сомнения в цене и выборе покрытия";
-
   for (const cat of RUBRIC_CATALOG){
     for (const it of cat.items){
-      const cb = byId(`rb_${it.id}`); if (cb) cb.checked = true;
-      const pt = byId(`pt_${it.id}`); if (pt) pt.value = (it.id === "grammar") ? "2" : "1";
+      const cb = byId(`rb_${it.id}`);
+      const pt = byId(`pt_${it.id}`);
+      if (cb) cb.checked = true;
+      if (pt) pt.value = (it.id === "grammar") ? "2" : "1";
     }
   }
 
@@ -99,16 +93,17 @@ function initSetup(){
     saveSession(sid, session);
 
     const url = new URL(location.href);
-    url.pathname = url.pathname.replace(/index\.html$/i, "chat.html").replace(/\/$/,"/chat.html");
+    url.pathname = url.pathname.replace(/index\.html$/i, "chat.html").replace(/\/$/, "/chat.html");
     url.searchParams.set("sid", sid);
 
-    byId("linkOut").value = url.toString();
+    const out = byId("linkOut");
+    if (out) out.value = url.toString();
   });
 
   byId("copyBtn")?.addEventListener("click", async () => {
-    const val = byId("linkOut").value;
-    if (!val) return;
-    await navigator.clipboard.writeText(val);
+    const out = byId("linkOut");
+    if (!out?.value) return;
+    await navigator.clipboard.writeText(out.value);
   });
 }
 
@@ -116,7 +111,6 @@ function renderRubricBlocks(){
   const host = byId("rubricBlocks");
   if (!host) return;
   host.innerHTML = "";
-
   for (const cat of RUBRIC_CATALOG){
     const blk = document.createElement("div");
     blk.className = "rubricBlock";
@@ -124,7 +118,6 @@ function renderRubricBlocks(){
                      <div class="rubricHeader"><div>Название</div><div>Баллы</div></div>`;
     const grid = document.createElement("div");
     grid.className = "rubricGrid";
-
     for (const it of cat.items){
       const item = document.createElement("div");
       item.className = "rubricItem";
@@ -135,7 +128,6 @@ function renderRubricBlocks(){
       grid.appendChild(item);
       grid.appendChild(pts);
     }
-
     blk.appendChild(grid);
     host.appendChild(blk);
   }
@@ -150,28 +142,28 @@ function buildSession(){
       checklist.push({ key: it.id, block: cat.block, title: it.label, points });
     }
   }
-  const objections = (byId("c_objections").value || "").split("\n").map(s=>s.trim()).filter(Boolean);
+  const objections = (byId("c_objections")?.value || "").split("\n").map(s=>s.trim()).filter(Boolean);
 
   return {
     createdAt: new Date().toISOString(),
     scenario: {
-      title: (byId("s_title").value || "").trim() || "Сценарий",
+      title: (byId("s_title")?.value || "").trim() || "Сценарий",
       client: {
-        name: (byId("c_name").value || "").trim() || "Клиент",
-        city: (byId("c_city").value || "").trim(),
-        goal: (byId("c_goal").value || "").trim(),
-        tone: byId("c_tone").value,
-        delivery: byId("c_delivery").value,
-        context: (byId("c_context").value || "").trim(),
+        name: (byId("c_name")?.value || "").trim() || "Клиент",
+        city: (byId("c_city")?.value || "").trim(),
+        goal: (byId("c_goal")?.value || "").trim(),
+        tone: byId("c_tone")?.value || "спокойный",
+        delivery: byId("c_delivery")?.value || "не знаю",
+        context: (byId("c_context")?.value || "").trim(),
         objections
       },
       checklist
     },
-    config: { ...loadConfig(), useLLM: !!byId("llmDefault").checked },
     transcript: [],
     manager: { fio: "" },
     endedAt: null,
-    score: null
+    score: null,
+    flags: null
   };
 }
 
@@ -189,61 +181,34 @@ function initChat(){
   const inputEl = byId("input");
   const sendBtn = byId("sendBtn");
   const endBtn = byId("endBtn");
-  const checklistEl = byId("checklist");
-  const scoreEl = byId("scoreValue");
-  const managerPill = byId("managerPill"); // optional (removed in v4)
-
-  const workerUrlEl = byId("workerUrl");
-  const saveModeEl = byId("saveMode");
 
   if (!session){
     scenarioTitleEl.textContent = "Сессия не найдена";
     scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки.";
     setStatus(statusDotEl, statusTextEl, "bad", "Нет сессии");
-    inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true; resetBtn.disabled = true;
+    inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true;
     return;
   }
 
-  const state = {
-    sid,
-    session,
-    config: { ...loadConfig(), ...(session.config || {}) },
-    ended: !!session.endedAt
-  };
+  const state = { sid, session, ended: !!session.endedAt };
 
-  if (workerUrlEl) workerUrlEl.value = state.config.workerUrl || "";
-  if (saveModeEl) saveModeEl.value = state.config.saveMode || "download";
+  window.__salesSimState = state;
 
   const c = session.scenario.client;
   scenarioTitleEl.textContent = session.scenario.title;
   scenarioMetaEl.textContent = `Клиент: ${c.name} • ${c.city} • Тон: ${c.tone} • Доставка: ${c.delivery} • Цель: ${c.goal}`;
 
   renderChat(chatEl, session.transcript || []);
-  ensureManagerFio(state, managerPill);
-  // если ФИО уже сохранено (повторный вход) — клиент стартует сам
-  if ((state.session.manager && state.session.manager.fio) && ((state.session.transcript||[]).length===0)) { startClientFirstMessage(state); }
+  ensureManagerFio(state);
 
-  renderChecklist(checklistEl, groupByBlock(session.scenario.checklist || []), null);
-  scoreEl.textContent = "—";
-  setHint(hintEl, "Оценка появится после “Завершить диалог”.");
+  if (state.session.manager?.fio && (state.session.transcript||[]).length === 0) {
+    startClientFirstMessage(state);
+  }
 
-  sendBtn.addEventListener("click", () => send(state, chatEl, inputEl, sendBtn, statusDotEl, statusTextEl, hintEl));
+  sendBtn.addEventListener("click", () => send());
   inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(state, chatEl, inputEl, sendBtn, statusDotEl, statusTextEl, hintEl); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   });
-
-  const _saveBtn = byId("saveConfigBtn"); if (_saveBtn) _saveBtn.addEventListener("click", () => {
-    state.config.workerUrl = workerUrlEl.value.trim();
-    state.config.useLLM = !!llmToggle.checked;
-    state.config.saveMode = saveModeEl.value;
-    saveConfig(state.config);
-    state.session.config = { ...state.session.config, ...state.config };
-    saveSession(state.sid, state.session);
-  });
-    renderChat(chatEl, []);
-    renderChecklist(checklistEl, groupByBlock(state.session.scenario.checklist||[]), null);
-    scoreEl.textContent = "—";
-  };
 
   endBtn.addEventListener("click", async () => {
     const result = scoreConversation(state.session);
@@ -253,68 +218,183 @@ function initChat(){
     state.ended = true;
     saveSession(state.sid, state.session);
 
-    scoreEl.textContent = `${result.score.total} / ${result.score.max}`;
-    renderChecklist(checklistEl, groupByBlock(state.session.scenario.checklist||[]), result.flags);
-    const sm = byId("scoreModal"); if (sm) sm.classList.remove("hidden");
-    const sc = byId("scoreClose"); if (sc) sc.onclick = () => sm.classList.add("hidden");
-    setStatus(statusDotEl, statusTextEl, "good", "Завершено");
-    await autoSaveResult(state);
-    // Закрыть окно после завершения
-    setTimeout(() => { try { window.close(); } catch(e) {} }, 300);
+    showScoreModal(state.session);
+    await sendResult(state);
   });
 
-  // status
-  if (state.config.useLLM && !state.config.workerUrl) setStatus(statusDotEl, statusTextEl, "warn", "LLM включен, но Worker URL пуст");
-  else if (state.config.useLLM) setStatus(statusDotEl, statusTextEl, "good", "LLM режим");
-  else setStatus(statusDotEl, statusTextEl, null, "Офлайн режим");
+  setHint(hintEl, "Оценка появится только после завершения.");
+  setStatus(statusDotEl, statusTextEl, "good", "Готово");
 
+  async function send(){
+    const text = (inputEl.value || "").trim();
+    if (!text) return;
+    if (state.ended) return;
 
-async function send(state, chatEl, inputEl, sendBtn, dotEl, textEl, hintEl){
-  const msg = (inputEl.value || "").trim();
-  if (!msg) return;
-  if (state.ended) return;
+    sendBtn.disabled = true;
+    inputEl.value = "";
 
-  sendBtn.disabled = true;
-  inputEl.value = "";
+    pushMsg(state.session, "user", text);
+    appendBubble(chatEl, text, "me");
+    setStatus(statusDotEl, statusTextEl, "warn", "Клиент печатает…");
 
-  pushMsg(state.session, "user", msg);
-  appendBubble(chatEl, msg, "me");
-  setStatus(dotEl, textEl, "warn", "Клиент печатает…");
+    try {
+      const reply = await callWorker(state, text);
+      pushMsg(state.session, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
+      appendBubble(chatEl, reply.reply, "client");
+      setStatus(statusDotEl, statusTextEl, "good", "Готово");
+    } catch (e) {
+      console.error(e);
+      setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
+      const fallback = "Не понял. Можете уточнить?";
+      pushMsg(state.session, "assistant", fallback, { intent: "offline", tags: ["offline"] });
+      appendBubble(chatEl, fallback, "client");
+    } finally {
+      saveSession(state.sid, state.session);
+      sendBtn.disabled = false;
+    }
+  }
+}
 
-  try{
-    const reply = await getClientReply(state, msg);
+function ensureManagerFio(state){
+  const st = state || window.__salesSimState;
+  if (!st || !st.session) return;
+
+  const existing = st.session.manager?.fio || "";
+  if (existing) return;
+
+  const modal = byId("fioModal");
+  const nameEl = byId("mgrName");
+  const okBtn = byId("mgrOk");
+  if (!modal || !nameEl || !okBtn) return;
+
+  modal.classList.remove("hidden");
+  nameEl.focus();
+
+  okBtn.onclick = () => {
+    const fio = (nameEl.value || "").trim();
+    if (!fio) return;
+    st.session.manager = { fio };
+    saveSession(st.sid, st.session);
+    modal.classList.add("hidden");
+    startClientFirstMessage(st);
+  };
+}
+
+async function startClientFirstMessage(state){
+  const tr = state.session.transcript || [];
+  if (tr.length > 0) return;
+
+  const c = state.session.scenario?.client || {};
+  const objections = Array.isArray(c.objections) && c.objections.length ? (" Возможные возражения: " + c.objections.join("; ") + ".") : "";
+  const prompt = `Сгенерируй первое сообщение от клиента для начала переписки. Данные клиента: имя=${c.name||""}, город=${c.city||""}, цель=${c.goal||""}, тон=${c.tone||""}, доставка=${c.delivery||""}. Контекст: ${c.context||""}.${objections} Пиши как реальный покупатель, 1-3 предложения.`;
+
+  try {
+    const reply = await callWorker(state, prompt);
     pushMsg(state.session, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
-    appendBubble(chatEl, reply.reply, "client");
-    setStatus(dotEl, textEl, state.config.useLLM ? "good" : null, "Готово");
-    setHint(hintEl, "По завершению нажмите “Завершить диалог”.");
-  } catch (e){
-    setStatus(dotEl, textEl, "bad", "Ошибка");
-    setHint(hintEl, "Ошибка ответа клиента. Проверьте Worker URL.");
-    console.error(e);
-  } finally {
+    appendBubble(byId("chat"), reply.reply, "client");
     saveSession(state.sid, state.session);
-    sendBtn.disabled = false;
+  } catch (e) {
+    const fallback = `Здравствуйте! Меня зовут ${c.name || "клиент"}. Я из ${c.city || "вашего города"}. ${c.goal ? "Хочу " + c.goal + "." : ""} ${c.context || ""}`.trim();
+    pushMsg(state.session, "assistant", fallback, { intent: "start_fallback", tags: ["start_fallback"] });
+    appendBubble(byId("chat"), fallback, "client");
+    saveSession(state.sid, state.session);
   }
 }
 
-/* ---------- LLM ---------- */
-async function getClientReply(state, managerMsg, forceLLM=false){
-  if ((forceLLM || state.config.useLLM) && state.config.workerUrl){
-    const url = state.config.workerUrl.replace(/\/$/,"");
-    const payload = {
-      history: (state.session.transcript||[]).map(m=>({ role:m.role, content:m.content })).slice(-12),
-      scenario: { ...state.session.scenario, manager: state.session.manager, state:{ turns:(state.session.transcript||[]).length } },
-      manager_message: managerMsg
+async function callWorker(state, managerMsg){
+  const payload = {
+    history: (state.session.transcript||[]).map(m=>({ role:m.role, content:m.content })).slice(-12),
+    scenario: { ...state.session.scenario, manager: state.session.manager, state: { turns: (state.session.transcript||[]).length } },
+    manager_message: managerMsg
+  };
+  const res = await fetch(WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return {
+    reply: String(data.reply || "Уточните, пожалуйста."),
+    intent: String(data.intent || ""),
+    tags: Array.isArray(data.tags) ? data.tags : []
+  };
+}
+
+function showScoreModal(session){
+  const modal = byId("scoreModal");
+  const closeBtn = byId("scoreClose");
+  const scoreEl = byId("scoreValue");
+  const listEl = byId("checklist");
+  if (!modal || !scoreEl || !listEl) return;
+
+  const score = session.score || { total: 0, max: 0 };
+  scoreEl.textContent = `${score.total} / ${score.max}`;
+
+  listEl.innerHTML = "";
+  const grouped = groupByBlock(session.scenario.checklist || []);
+  for (const block of Object.keys(grouped)){
+    const h = document.createElement("div");
+    h.className = "small";
+    h.style.padding = "10px 0 0";
+    h.style.fontWeight = "750";
+    h.textContent = block;
+    listEl.appendChild(h);
+
+    for (const it of grouped[block]){
+      const f = (session.flags || {})[it.key];
+      const ok = f ? !!f.ok : false;
+      const badge = ok ? `+${it.points}` : "0";
+      const cls = ok ? "ok" : "no";
+      const row = document.createElement("div");
+      row.className = "checkItem";
+      row.innerHTML = `<div class="checkLeft"><div class="checkTitle">${escapeHtml(it.title)}</div></div><div class="badge ${cls}">${badge}</div>`;
+      listEl.appendChild(row);
+    }
+  }
+
+  modal.classList.remove("hidden");
+  if (closeBtn){
+    closeBtn.onclick = () => {
+      modal.classList.add("hidden");
+      try { window.close(); } catch(e) {}
     };
-    const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    return { reply: String(data.reply||"Уточните, пожалуйста."), intent: String(data.intent||""), tags: Array.isArray(data.tags)?data.tags:[] };
   }
-  return { reply:"Я не очень понял. Можете объяснить проще?", intent:"offline", tags:["offline"] };
 }
 
-/* ---------- Scoring ---------- */
+function groupByBlock(list){
+  const out = {};
+  for (const it of (list || [])){
+    (out[it.block] ||= []).push(it);
+  }
+  return out;
+}
+
+async function sendResult(state){
+  const result = {
+    sid: state.sid,
+    createdAt: state.session.createdAt,
+    endedAt: state.session.endedAt,
+    scenario: state.session.scenario,
+    manager: state.session.manager,
+    score: state.session.score,
+    flags: state.session.flags,
+    transcript: state.session.transcript
+  };
+
+  const saveUrl = WORKER_URL + "/save";
+  try {
+    const r = await fetch(saveUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(result)
+    });
+    if (!r.ok) throw new Error(await r.text());
+  } catch(e) {
+    downloadJson(result, `result-${state.sid}.json`);
+  }
+}
+
 function scoreConversation(session){
   const checklist = session.scenario.checklist || [];
   const tr = session.transcript || [];
@@ -341,7 +421,7 @@ function scoreConversation(session){
     max += pts;
     let ok = false;
 
-    switch (it.key){
+    switch (it.key) {
       case "greeting": ok = /здравств|добрый день|добрый вечер|привет/i.test(low); break;
       case "intro_self": ok = /меня зовут|я .*менеджер/i.test(low); break;
       case "intro_company": ok = /компан|мы .* (производ|склад|завод|магазин)/i.test(low); break;
@@ -403,11 +483,8 @@ function detectInterrupt(tr){
   for (const m of tr){
     if (m.role === "user"){
       const t = Date.parse(m.ts || "");
-      if (Number.isFinite(t) && lastUserTs !== null && (t - lastUserTs) <= 4000){
-        streak += 1;
-      } else {
-        streak = 1;
-      }
+      if (Number.isFinite(t) && lastUserTs !== null && (t - lastUserTs) <= 4000) streak += 1;
+      else streak = 1;
       lastUserTs = t;
       if (streak >= 2) return true;
     } else {
@@ -437,91 +514,18 @@ function grammarBusinessOk(text){
   const typos = ["граммот","пожайлуста","здела","пожалуйсто","извен","вообщем","прийд","ложить","ихний","нету"];
   let bad = 0;
   for (const w of typos) if (low.includes(w)) bad++;
-  if (/(!!+|\?\?+|\.{4,}|,,+)/.test(t)) bad++;
+  if (/(!!+|\?\?+|\.(4,)|,,+)/.test(t)) bad++;
   if (t.length >= 120 && /[,.!?][А-Яа-яЁё]/.test(t)) bad++;
   return bad <= 1;
 }
 
-/* ---------- Saving ---------- */
-async function autoSaveResult(state){
-  const result = {
-    sid: state.sid,
-    createdAt: state.session.createdAt,
-    endedAt: state.session.endedAt,
-    scenario: state.session.scenario,
-    manager: state.session.manager,
-    score: state.session.score,
-    flags: state.session.flags,
-    transcript: state.session.transcript
-  };
-  if ((state.config.saveMode || "download") === "worker" && state.config.workerUrl){
-    const base = state.config.workerUrl.replace(/\/$/,"");
-    const saveUrl = base + "/save";
-    try{
-      const res = await fetch(saveUrl, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(result) });
-      if (!res.ok) throw new Error(await res.text());
-      return;
-    } catch (e){
-      downloadJson(result, `result-${state.sid}.json`);
-      return;
-    }
-  }
-  downloadJson(result, `result-${state.sid}.json`);
-}
-
-
-async function startClientFirstMessage(state){
-  const tr = state.session.transcript || [];
-  if (tr.length > 0) return;
-
-  const c = state.session.scenario?.client || {};
-  const objections = Array.isArray(c.objections) && c.objections.length ? (" Возможные возражения: " + c.objections.join("; ") + ".") : "";
-  const prompt = `Сгенерируй первое сообщение от клиента для начала переписки. Данные клиента: имя=${c.name||""}, город=${c.city||""}, цель=${c.goal||""}, тон=${c.tone||""}, доставка=${c.delivery||""}. Контекст: ${c.context||""}.${objections} Пиши как реальный покупатель, 1-3 предложения.`;
-
-  try{
-    const res = await getClientReply(state, prompt, true);
-    pushMsg(state.session, "assistant", res.reply, { intent: res.intent, tags: res.tags });
-    const chatEl = document.getElementById("chat");
-    if (chatEl) appendBubble(chatEl, res.reply, "client");
-    saveSession(state.sid, state.session);
-  } catch (e){
-    const fallback = `Здравствуйте! Меня зовут ${c.name || "клиент"}. Я из ${c.city || "вашего города"}. ${c.goal ? "Хочу " + c.goal + "." : ""} ${c.context || ""}`.trim();
-    pushMsg(state.session, "assistant", fallback, { intent: "start_fallback", tags: ["start_fallback"] });
-    const chatEl = document.getElementById("chat");
-    if (chatEl) appendBubble(chatEl, fallback, "client");
-    saveSession(state.sid, state.session);
-  }
-}
-
-/* ---------- Modal ---------- */
-function ensureManagerFio(state, pill){
-  const existing = state.session.manager?.fio || "";
-  if (existing){ if (pill) pill.textContent = `Менеджер: ${existing}`; return; }
-  const modal = byId("modal");
-  const input = byId("mgrName");
-  const ok = byId("mgrOk");
-  modal.classList.remove("hidden");
-  input.focus();
-  ok.addEventListener("click", () => {
-    const fio = (input.value || "").trim();
-    if (!fio) return;
-    state.session.manager = { fio };
-    saveSession(state.sid, state.session);
-    if (pill) pill.textContent = `Менеджер: ${fio}`;
-    modal.classList.add("hidden");
-    // авто-старт: клиент пишет первым
-    startClientFirstMessage(state);
-
-  });
-}
-
-/* ---------- UI helpers ---------- */
 function renderChat(chatEl, tr){
   chatEl.innerHTML = "";
   for (const m of (tr||[])) appendBubble(chatEl, m.content, m.role==="user" ? "me" : "client");
   chatEl.scrollTop = chatEl.scrollHeight;
 }
 function appendBubble(chatEl, text, who){
+  if (!chatEl) return;
   const row = document.createElement("div");
   row.className = "msg " + (who==="me" ? "me" : "client");
   const b = document.createElement("div");
@@ -529,39 +533,7 @@ function appendBubble(chatEl, text, who){
   b.textContent = text;
   row.appendChild(b);
   chatEl.appendChild(row);
-}
-function renderChecklist(container, grouped, flags){
-  container.innerHTML = "";
-  for (const block of Object.keys(grouped||{})){
-    const h = document.createElement("div");
-    h.className = "small";
-    h.style.padding = "10px 14px 0";
-    h.style.fontWeight = "750";
-    h.textContent = block;
-    container.appendChild(h);
-
-    for (const it of grouped[block]){
-      const f = flags ? flags[it.key] : null;
-      const ok = f ? !!f.ok : null;
-      const badge = ok === null ? "—" : (ok ? `+${it.points}` : "0");
-      const cls = ok === null ? "" : (ok ? "ok" : "no");
-
-      const row = document.createElement("div");
-      row.className = "checkItem";
-      row.innerHTML = `
-        <div class="checkLeft"><div class="checkTitle">${escapeHtml(it.title)}</div></div>
-        <div class="badge ${cls}">${badge}</div>
-      `;
-      container.appendChild(row);
-    }
-  }
-}
-function groupByBlock(list){
-  const out = {};
-  for (const it of (list||[])){
-    (out[it.block] ||= []).push(it);
-  }
-  return out;
+  chatEl.scrollTop = chatEl.scrollHeight;
 }
 function pushMsg(session, role, content, meta){
   const m = { role, content, ts: new Date().toISOString() };
@@ -585,21 +557,13 @@ function downloadJson(obj, name){
   URL.revokeObjectURL(a.href);
 }
 
-/* ---------- Storage ---------- */
 function saveSession(sid, session){ localStorage.setItem(`${STORAGE_NS}:session:${sid}`, JSON.stringify(session)); }
 function loadSession(sid){
   const raw = localStorage.getItem(`${STORAGE_NS}:session:${sid}`);
   if (!raw) return null;
-  try{ return JSON.parse(raw); } catch { return null; }
+  try { return JSON.parse(raw); } catch { return null; }
 }
-function loadConfig(){
-  const raw = localStorage.getItem(`${STORAGE_NS}:config`);
-  if (!raw) return { ...DEFAULT_CONFIG };
-  try{ return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }; } catch { return { ...DEFAULT_CONFIG }; }
-}
-function saveConfig(cfg){ localStorage.setItem(`${STORAGE_NS}:config`, JSON.stringify({ ...DEFAULT_CONFIG, ...cfg })); }
 
-/* ---------- Utils ---------- */
 function byId(id){ return document.getElementById(id); }
 function toInt(s, d){ const x = parseInt(String(s||"").trim(),10); return Number.isFinite(x)?x:d; }
 function randomId(n){ const a="abcdefghijklmnopqrstuvwxyz0123456789"; let s=""; for (let i=0;i<n;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
