@@ -7,7 +7,7 @@
 
 const WORKER_URL = "https://royal-breeze-aac8.julya14temina.workers.dev";
 
-const STORAGE_NS = "sales-sim:v10";
+const STORAGE_NS = "sales-sim:v14";
 
 const RUBRIC_CATALOG = [
   { block: "Установление контакта", items: [
@@ -87,18 +87,30 @@ function initSetup(){
     }
   }
 
-  btn.addEventListener("click", () => {
-    const session = buildSession();
-    const sid = "s_" + randomId(12);
-    saveSession(sid, session);
+  btn.addEventListener("click", async () => {
+  const session = buildSession();
+  const sid = "s_" + randomId(12);
 
-    const url = new URL(location.href);
-    url.pathname = url.pathname.replace(/index\.html$/i, "chat.html").replace(/\/$/, "/chat.html");
-    url.searchParams.set("sid", sid);
+  // save locally (cache)
+  saveSession(sid, session);
 
-    const out = byId("linkOut");
-    if (out) out.value = url.toString();
-  });
+  // save remotely so the link works on any device/browser
+  try {
+    await createRemoteSession(sid, session);
+  } catch (e) {
+    console.error(e);
+    alert("Не удалось сохранить сессию на сервере. Ссылка откроется только на этом устройстве.
+
+Проверьте Worker и CORS.");
+  }
+
+  const url = new URL(location.href);
+  url.pathname = url.pathname.replace(/index\.html$/i, "chat.html").replace(/\/$/, "/chat.html");
+  url.searchParams.set("sid", sid);
+
+  const out = byId("linkOut");
+  if (out) out.value = url.toString();
+});
 
   byId("copyBtn")?.addEventListener("click", async () => {
     const out = byId("linkOut");
@@ -170,7 +182,7 @@ function buildSession(){
 /* ---------- Chat ---------- */
 function initChat(){
   const sid = new URLSearchParams(location.search).get("sid") || "";
-  const session = sid ? loadSession(sid) : null;
+  let session = sid ? loadSession(sid) : null;
 
   const scenarioTitleEl = byId("scenarioTitle");
   const scenarioMetaEl = byId("scenarioMeta");
@@ -182,15 +194,42 @@ function initChat(){
   const sendBtn = byId("sendBtn");
   const endBtn = byId("endBtn");
 
-  if (!session){
-    scenarioTitleEl.textContent = "Сессия не найдена";
-    scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки.";
-    setStatus(statusDotEl, statusTextEl, "bad", "Нет сессии");
-    inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true;
-    return;
-  }
+if (!sid){
+  scenarioTitleEl.textContent = "Сессия не найдена";
+  scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки.";
+  setStatus(statusDotEl, statusTextEl, "bad", "Нет sid");
+  inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true;
+  return;
+}
 
-  const state = { sid, session, ended: !!session.endedAt };
+if (!session){
+  // try to load from Worker (KV) so the link works on any device/browser
+  scenarioTitleEl.textContent = "Загрузка сессии…";
+  scenarioMetaEl.textContent = "Получаем данные с сервера…";
+  setStatus(statusDotEl, statusTextEl, "warn", "Загрузка…");
+  inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true;
+
+  loadRemoteSession(sid).then((remote) => {
+    if (!remote){
+      scenarioTitleEl.textContent = "Сессия не найдена";
+      scenarioMetaEl.textContent = "Сессия не найдена на сервере. Проверьте: вы создали ссылку и Worker сохранил сессию.";
+      setStatus(statusDotEl, statusTextEl, "bad", "Нет сессии");
+      return;
+    }
+    saveSession(sid, remote); // cache locally
+    // перезагрузим страницу чата, чтобы инициализация пошла обычным путём
+    location.reload();
+  }).catch((e)=>{
+    console.error(e);
+    scenarioTitleEl.textContent = "Ошибка загрузки";
+    scenarioMetaEl.textContent = "Не удалось загрузить сессию с сервера.";
+    setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
+  });
+
+  return;
+}
+
+const state = { sid, session, ended: !!session.endedAt };
 
   const c = session.scenario.client;
   scenarioTitleEl.textContent = session.scenario.title;
@@ -556,6 +595,24 @@ function loadSession(sid){
   const raw = localStorage.getItem(`${STORAGE_NS}:session:${sid}`);
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
+}
+
+async function createRemoteSession(sid, session){
+  const r = await fetch(`${WORKER_URL}/session/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sid, session })
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return await r.json(); // { ok:true, sid }
+}
+
+async function loadRemoteSession(sid){
+  const r = await fetch(`${WORKER_URL}/session/get?sid=${encodeURIComponent(sid)}`, {
+    method: "GET"
+  });
+  if (!r.ok) return null;
+  try { return await r.json(); } catch { return null; }
 }
 
 function byId(id){ return document.getElementById(id); }
