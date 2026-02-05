@@ -7,7 +7,7 @@
 
 const WORKER_URL = "https://royal-breeze-aac8.julya14temina.workers.dev";
 
-const STORAGE_NS = "sales-sim:v14";
+const STORAGE_NS = "sales-sim:v15";
 
 const RUBRIC_CATALOG = [
   { block: "Установление контакта", items: [
@@ -91,17 +91,15 @@ function initSetup(){
   const session = buildSession();
   const sid = "s_" + randomId(12);
 
-  // save locally (cache)
+  // local cache
   saveSession(sid, session);
 
-  // save remotely so the link works on any device/browser
+  // remote store (so link works anywhere)
   try {
     await createRemoteSession(sid, session);
   } catch (e) {
     console.error(e);
-    alert("Не удалось сохранить сессию на сервере. Ссылка откроется только на этом устройстве.
-
-Проверьте Worker и CORS.");
+    alert("Не удалось сохранить сессию на сервере. Ссылка откроется только на этом устройстве.\n\nПроверьте Worker (/session/create) и CORS.");
   }
 
   const url = new URL(location.href);
@@ -194,7 +192,7 @@ function initChat(){
   const sendBtn = byId("sendBtn");
   const endBtn = byId("endBtn");
 
-if (!sid){
+  if (!sid) {
   scenarioTitleEl.textContent = "Сессия не найдена";
   scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки.";
   setStatus(statusDotEl, statusTextEl, "bad", "Нет sid");
@@ -202,24 +200,22 @@ if (!sid){
   return;
 }
 
-if (!session){
-  // try to load from Worker (KV) so the link works on any device/browser
+if (!session) {
   scenarioTitleEl.textContent = "Загрузка сессии…";
   scenarioMetaEl.textContent = "Получаем данные с сервера…";
   setStatus(statusDotEl, statusTextEl, "warn", "Загрузка…");
   inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true;
 
   loadRemoteSession(sid).then((remote) => {
-    if (!remote){
+    if (!remote) {
       scenarioTitleEl.textContent = "Сессия не найдена";
-      scenarioMetaEl.textContent = "Сессия не найдена на сервере. Проверьте: вы создали ссылку и Worker сохранил сессию.";
+      scenarioMetaEl.textContent = "Сессия не найдена на сервере. Создайте ссылку заново.";
       setStatus(statusDotEl, statusTextEl, "bad", "Нет сессии");
       return;
     }
-    saveSession(sid, remote); // cache locally
-    // перезагрузим страницу чата, чтобы инициализация пошла обычным путём
+    saveSession(sid, remote); // cache
     location.reload();
-  }).catch((e)=>{
+  }).catch((e) => {
     console.error(e);
     scenarioTitleEl.textContent = "Ошибка загрузки";
     scenarioMetaEl.textContent = "Не удалось загрузить сессию с сервера.";
@@ -229,7 +225,7 @@ if (!session){
   return;
 }
 
-const state = { sid, session, ended: !!session.endedAt };
+  const state = { sid, session, ended: !!session.endedAt };
 
   const c = session.scenario.client;
   scenarioTitleEl.textContent = session.scenario.title;
@@ -604,16 +600,15 @@ async function createRemoteSession(sid, session){
     body: JSON.stringify({ sid, session })
   });
   if (!r.ok) throw new Error(await r.text());
-  return await r.json(); // { ok:true, sid }
+  return await r.json();
 }
 
 async function loadRemoteSession(sid){
-  const r = await fetch(`${WORKER_URL}/session/get?sid=${encodeURIComponent(sid)}`, {
-    method: "GET"
-  });
+  const r = await fetch(`${WORKER_URL}/session/get?sid=${encodeURIComponent(sid)}`, { method: "GET" });
   if (!r.ok) return null;
   try { return await r.json(); } catch { return null; }
 }
+
 
 function byId(id){ return document.getElementById(id); }
 function toInt(s, d){ const x = parseInt(String(s||"").trim(),10); return Number.isFinite(x)?x:d; }
