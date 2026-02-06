@@ -280,7 +280,7 @@ if (!session) {
     } catch (e) {
       console.error(e);
       setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
-      const fallback = "Не понял. Можете уточнить?";
+      const fallback = "Похоже, связь подвисла. Отправьте сообщение ещё раз (или обновите страницу).";
       pushMsg(state.session, "assistant", fallback, { intent: "offline", tags: ["offline"] });
       appendBubble(chatEl, fallback, "client");
     } finally {
@@ -338,19 +338,39 @@ async function callWorker(state, managerMsg){
     scenario: { ...state.session.scenario, manager: state.session.manager, state: { turns: (state.session.transcript||[]).length } },
     manager_message: managerMsg
   };
-  const res = await fetch(WORKER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  return {
-    reply: String(data.reply || "Уточните, пожалуйста."),
-    intent: String(data.intent || ""),
-    tags: Array.isArray(data.tags) ? data.tags : []
-  };
+
+  let lastErr = "";
+  for (let attempt = 0; attempt < 2; attempt++){
+    try{
+      const res = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      // Worker should ideally always return 200 with JSON; but handle non-OK just in case
+      if (!res.ok){
+        lastErr = await res.text();
+        await sleep(250 * (attempt + 1));
+        continue;
+      }
+
+      const data = await res.json();
+      return {
+        reply: String(data.reply || "Уточните, пожалуйста."),
+        intent: String(data.intent || ""),
+        tags: Array.isArray(data.tags) ? data.tags : []
+      };
+    } catch (e){
+      lastErr = String(e?.message || e);
+      await sleep(250 * (attempt + 1));
+      continue;
+    }
+  }
+
+  throw new Error(lastErr || "worker_error");
 }
+
 
 function showScoreModal(session){
   const modal = byId("scoreModal");
@@ -611,6 +631,8 @@ async function loadRemoteSession(sid){
   try { return await r.json(); } catch { return null; }
 }
 
+
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
 function byId(id){ return document.getElementById(id); }
 function toInt(s, d){ const x = parseInt(String(s||"").trim(),10); return Number.isFinite(x)?x:d; }
