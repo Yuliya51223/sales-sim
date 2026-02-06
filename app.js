@@ -21,7 +21,7 @@ const RUBRIC_CATALOG = [
     { id:"use_name_3", label:"Использует имя клиента в разговоре 3 и более раз" },
     { id:"formatting", label:"Уверенность в голосе/ соблюдение норм оформления сообщений в чате" },
     { id:"initiative", label:"Проявляет инициативу в разговоре" },
-    { id:"grammar", label:"Грамотная деловая речь (проверка грамотности менеджера в диалоге)" },
+    { id:"grammar", label:"Грамотная деловая речь" },
     { id:"no_interrupt", label:"Не перебивает клиента/не говорит одновременно с клиентом" },
     { id:"active_listen", label:"Использует техники активного слушания" }
   ]},
@@ -102,7 +102,9 @@ function initSetup(){
     alert("Не удалось сохранить сессию на сервере. Ссылка откроется только на этом устройстве.\n\nПроверьте Worker (/session/create) и CORS.");
   }
 
-  const url = new URL(location.href);
+  const url = new URL(location.origin + location.pathname);
+  url.search = "";
+  url.hash = "";
   url.pathname = url.pathname.replace(/index\.html$/i, "chat.html").replace(/\/$/, "/chat.html");
   url.searchParams.set("sid", sid);
 
