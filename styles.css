@@ -292,3 +292,9 @@ textarea:focus{ border-color: rgba(255,255,255,.35); }
   overflow: auto;
   padding-right: 6px;
 }
+
+/* Hide scenario header/meta in manager chat view */
+#scenarioTitle,
+#scenarioMeta {
+  display: none !important;
+}
