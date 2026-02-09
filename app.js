@@ -5,7 +5,7 @@
    - результат (диалог + оценка) отправляется на Worker /save (Cloudflare KV/D1) с fallback на скачивание
 */
 
-const WORKER_URL = "https://royal-breeze-aac8.julya14temina.workers.dev";
+const WORKER_URL = "https://d5de7bqfdbt3i3ft9ggb.qsvaa8tq.apigw.yandexcloud.net";
 
 const STORAGE_NS = "sales-sim:v15";
 
