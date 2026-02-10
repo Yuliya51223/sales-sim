@@ -188,7 +188,6 @@ function buildSession(){
         checklist.push({ key: it.id, block: cat.block, title: it.label, points });
       }
     }
-  }
 
   const objections = (byId("c_objections")?.value || "").split("\n").map(s=>s.trim()).filter(Boolean);
 
