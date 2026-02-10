@@ -78,6 +78,30 @@ function initSetup(){
 
   renderRubricBlocks();
 
+  // scoring toggle
+  const scoreToggle = byId("scoreEnabled");
+  const rubricSection = byId("rubricSection");
+  const scoreLabel = scoreToggle?.closest(".toggle")?.querySelector("span");
+
+  function applyScoreToggle(){
+    const on = (scoreToggle?.checked !== false);
+    if (rubricSection) rubricSection.style.display = on ? "" : "none";
+    // disable rubric inputs when off
+    if (scoringEnabled) for (const cat of RUBRIC_CATALOG){
+      for (const it of cat.items){
+        const cb = byId(`rb_${it.id}`);
+        const pt = byId(`pt_${it.id}`);
+        if (cb) cb.disabled = !on;
+        if (pt) pt.disabled = !on;
+      }
+    }
+    if (scoreLabel) scoreLabel.textContent = on ? "Оценка включена" : "Оценка выключена";
+  }
+
+  scoreToggle?.addEventListener("change", applyScoreToggle);
+  applyScoreToggle();
+
+
   for (const cat of RUBRIC_CATALOG){
     for (const it of cat.items){
       const cb = byId(`rb_${it.id}`);
@@ -110,6 +134,12 @@ function initSetup(){
 
   const out = byId("linkOut");
   if (out) out.value = url.toString();
+} const toast = byId("linkCreated");
+  if (toast){
+    toast.style.display = "";
+    clearTimeout(window.__linkToastT);
+    window.__linkToastT = setTimeout(()=>{ toast.style.display = "none"; }, 2000);
+  }
 });
 
   byId("copyBtn")?.addEventListener("click", async () => {
@@ -146,14 +176,19 @@ function renderRubricBlocks(){
 }
 
 function buildSession(){
+  const scoringEnabled = (byId("scoreEnabled")?.checked !== false);
+
   const checklist = [];
-  for (const cat of RUBRIC_CATALOG){
-    for (const it of cat.items){
-      if (!byId(`rb_${it.id}`)?.checked) continue;
-      const points = toInt(byId(`pt_${it.id}`)?.value, 1);
-      checklist.push({ key: it.id, block: cat.block, title: it.label, points });
+  if (scoringEnabled){
+    for (const cat of RUBRIC_CATALOG){
+      for (const it of cat.items){
+        if (!byId(`rb_${it.id}`)?.checked) continue;
+        const points = toInt(byId(`pt_${it.id}`)?.value, 1);
+        checklist.push({ key: it.id, block: cat.block, title: it.label, points });
+      }
     }
   }
+
   const objections = (byId("c_objections")?.value || "").split("\n").map(s=>s.trim()).filter(Boolean);
 
   return {
@@ -169,7 +204,8 @@ function buildSession(){
         context: (byId("c_context")?.value || "").trim(),
         objections
       },
-      checklist
+      checklist,
+      scoreEnabled: scoringEnabled
     },
     transcript: [],
     manager: { fio: "" },
@@ -178,6 +214,7 @@ function buildSession(){
     flags: null
   };
 }
+
 
 /* ---------- Chat ---------- */
 function initChat(){
@@ -246,18 +283,32 @@ if (!session) {
   });
 
   endBtn.addEventListener("click", async () => {
-    const result = scoreConversation(state.session);
+    const scoringEnabled = (state.session?.scenario?.scoreEnabled !== false);
     state.session.endedAt = new Date().toISOString();
-    state.session.score = result.score;
-    state.session.flags = result.flags;
+
+    if (scoringEnabled) {
+      const result = scoreConversation(state.session);
+      state.session.score = result.score;
+      state.session.flags = result.flags;
+    } else {
+      state.session.score = null;
+      state.session.flags = null;
+    }
+
     state.ended = true;
     saveSession(state.sid, state.session);
 
-    showScoreModal(state.session);
+    if (scoringEnabled) {
+      showScoreModal(state.session);
+    } else {
+      alert("Диалог завершён. Оценка отключена.");
+    }
+
     await sendResult(state);
   });
 
-  setHint(hintEl, "Оценка появится только после завершения.");
+  if (state.session?.scenario?.scoreEnabled === false) setHint(hintEl, "Оценка отключена для этой сессии.");
+  else setHint(hintEl, "Оценка появится только после завершения.");
   setStatus(statusDotEl, statusTextEl, "good", "Готово");
 
   async function send(){
