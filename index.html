@@ -34,10 +34,9 @@
       <div class="cardInner" style="margin:12px 14px 14px;">
         <h3 class="h3">Ссылка для менеджера</h3>
         <div class="small" style="margin-top:-6px;">Сначала нажмите “Создать ссылку”, затем скопируйте и отправьте менеджеру.</div>
-        <div class="row" style="gap:10px; padding:0; align-items:center;">
+        <div class="row" style="gap:10px; padding:0;">
           <input id="linkOut" type="text" class="linkOut" placeholder="Нажмите “Создать ссылку”" readonly />
           <button id="copyBtn" class="btn btn-ghost" type="button">Копировать</button>
-          <span id="linkCreated" class="small" style="display:none; white-space:nowrap; opacity:.9;">Ссылка создана</span>
         </div>
         <div class="small">Отправьте эту ссылку менеджеру. При открытии чата будет запрошено ФИО менеджера.</div>
       </div>
@@ -78,11 +77,10 @@
         </div>
 
         <div class="cardInner">
-          <div class="row" style="justify-content:space-between; align-items:center; gap:12px;"><h3 class="h3" style="margin:0;">Оценка диалога</h3><label class="toggle" title="Включить/выключить оценку для этой сессии"><input id="scoreEnabled" type="checkbox" checked><span class="small" style="margin:0;">Оценка включена</span></label></div>
-          <div id="rubricSection">
-            <div class="meta" style="margin-bottom:10px;">Выберите пункты (галочками) и задайте баллы. Оценка показывается менеджеру только после “Завершить диалог”.</div>
-            <div id="rubricBlocks" class="rubricBlocks"></div>
-          </div>
+          <h3 class="h3">Оценка диалога</h3>
+          <div class="meta" style="margin-bottom:10px;">Выберите пункты (галочками) и задайте баллы. Оценка показывается менеджеру только после “Завершить диалог”.</div>
+
+          <div id="rubricBlocks" class="rubricBlocks"></div>
 
           <div class="form" style="margin-top:10px;">
             <label class="field">

@@ -298,5 +298,3 @@ textarea:focus{ border-color: rgba(255,255,255,.35); }
 #scenarioMeta {
   display: none !important;
 }
-
-#linkCreated{ padding:6px 10px; border:1px solid var(--line); border-radius:999px; background: rgba(255,255,255,.06); }
