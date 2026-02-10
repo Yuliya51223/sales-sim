@@ -399,9 +399,7 @@ els.btnLoad.onclick = async () => {
       els.viewer.innerHTML = '<div class="muted">Список пуст или нет доступа.</div>';
     }
   } catch (e) {
-    alert('Ошибка загрузки. Проверьте token и base URL.
-
-' + e);
+    alert('Ошибка загрузки. Проверьте token и base URL.\n\n' + e);
   }
 };
 
