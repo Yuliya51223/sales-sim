@@ -42,6 +42,9 @@
     .pill { display:inline-block; padding:4px 10px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.06); font-size:12px; margin: 0 6px 6px 0; }
 
     .chat { display:flex; flex-direction:column; gap:12px; padding: 6px 2px; }
+    .chatWrap{max-height: 520px; overflow-y:auto; padding-right:6px;}
+    @media (max-width: 980px){.chatWrap{max-height: 60vh;}}
+
     .msgRow { display:flex; }
     .msgRow.me { justify-content:flex-end; }
     .msgRow.them { justify-content:flex-start; }
@@ -86,7 +89,8 @@
     .mark.no { background: rgba(255,120,120,.14); }
     .scoreTitle { font-size: 13px; }
     .pts { font-size: 12px; color: var(--muted); white-space:nowrap; padding-top:2px; }
-  </style>
+      body{background:#000;}
+</style>
 </head>
 <body>
   <div class="topbar">
@@ -212,6 +216,17 @@ function pickManagerFio(obj) {
       || obj?.scenario?.manager?.fio
       || obj?.session?.scenario?.manager?.fio
       || '';
+}
+
+
+function renderTitle(obj){
+  const fio = pickManagerFio(obj);
+  const dt = obj.createdAt || obj.endedAt || obj.metadata?.endedAt || obj.metadata?.createdAt || '';
+  const dtShort = dt ? String(dt).replace('T',' ').replace('Z','') : '';
+  if (fio && dtShort) return `Диалог — ${fio} — ${dtShort}`;
+  if (fio) return `Диалог — ${fio}`;
+  if (dtShort) return `Диалог — ${dtShort}`;
+  return 'Диалог';
 }
 
 function renderScenarioPills(obj) {
@@ -342,7 +357,7 @@ function renderViewer(obj) {
   const header = document.createElement('div');
   header.className = 'section';
   header.innerHTML = `
-    <h3>Сводка</h3>
+    <h3>${escapeHtml(renderTitle(obj))}</h3>
     <div class="muted">${escapeHtml(createdAt ? ('Дата: ' + createdAt) : '—')}${sid ? (' · sid: ' + sid) : ''}</div>
     <div style="margin-top:8px;">${renderScenarioPills(obj) || '<span class="muted">—</span>'}</div>
   `;
@@ -353,7 +368,10 @@ function renderViewer(obj) {
     const sec = document.createElement('div');
     sec.className = 'section';
     sec.innerHTML = '<h3>Диалог</h3>';
-    sec.appendChild(renderChat(msgs));
+    const wrap = document.createElement('div');
+    wrap.className = 'chatWrap';
+    wrap.appendChild(renderChat(msgs));
+    sec.appendChild(wrap);
     els.viewer.appendChild(sec);
   } else {
     const sec = document.createElement('div');
@@ -381,6 +399,14 @@ function renderList(keys) {
         els.viewer.innerHTML = '<div class="muted">Загрузка…</div>';
         const data = await api('/get?key=' + encodeURIComponent(key));
         renderViewer(data);
+        try {
+          const fio = pickManagerFio(data);
+          const dt = data.createdAt || data.endedAt || data.metadata?.endedAt || data.metadata?.createdAt || '';
+          const dtShort = dt ? String(dt).slice(0,19).replace('T',' ') : '';
+          const sub = li.querySelector('.k');
+          if (sub) sub.textContent = (String(key).startsWith('sess:') ? 'Настройки (sess:...)' : 'Диалог/результат (s_...)') + (fio || dtShort ? ` · ${fio || '—'} · ${dtShort || '—'}` : '');
+        } catch(e) {}
+
       } catch (e) {
         els.viewer.innerHTML = '<pre>' + escapeHtml(String(e)) + '</pre>';
       }
