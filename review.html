@@ -384,6 +384,37 @@ function renderViewer(obj) {
   if (scoreSec) els.viewer.appendChild(scoreSec);
 }
 
+
+// --- list enrichment: add manager fio + date without clicking ---
+function pLimit(limit){
+  let active = 0;
+  const queue = [];
+  const next = () => {
+    if (active >= limit || queue.length === 0) return;
+    active++;
+    const {fn, resolve, reject} = queue.shift();
+    Promise.resolve()
+      .then(fn)
+      .then(resolve, reject)
+      .finally(() => { active--; next(); });
+  };
+  return (fn) => new Promise((resolve, reject) => { queue.push({fn, resolve, reject}); next(); });
+}
+
+async function enrichListItem(key, li){
+  try{
+    const isSess = String(key).startsWith('sess:');
+    if (isSess) return;
+    const data = await api('/get?key=' + encodeURIComponent(key));
+    const fio = pickManagerFio(data) || '—';
+    const dt = data.createdAt || data.endedAt || data.metadata?.endedAt || data.metadata?.createdAt || '';
+    const dtShort = dt ? String(dt).slice(0,19).replace('T',' ') : '—';
+    const sub = li.querySelector('.k');
+    if (sub) sub.textContent = `Диалог/результат (s_...) · ${fio} · ${dtShort}`;
+  } catch(e){
+    // silently ignore (token, network, etc.)
+  }
+}
 function renderList(keys) {
   els.list.innerHTML = '';
   (keys || []).forEach(k => {
@@ -412,6 +443,11 @@ function renderList(keys) {
       }
     };
     els.list.appendChild(li);
+    // enrich subtitle (manager fio + date) in background
+    if (!String(key).startsWith('sess:')) {
+      if (!window.__enrichLimit) window.__enrichLimit = pLimit(6);
+      window.__enrichLimit(() => enrichListItem(key, li));
+    }
   });
 }
 
