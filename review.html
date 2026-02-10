@@ -6,17 +6,37 @@
   <title>Просмотр диалогов</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
-    .card { max-width: 980px; margin: 16px auto; padding: 16px; }
+    :root {
+      --card: rgba(255,255,255,.05);
+      --border: rgba(255,255,255,.12);
+      --muted: rgba(255,255,255,.7);
+      --me: rgba(120,180,255,.14);
+      --them: rgba(255,255,255,.08);
+    }
+    .wrap { max-width: 1220px; margin: 16px auto; padding: 0 12px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; }
     .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
     .row > div { flex:1; min-width:220px; }
-    input { width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color:#fff; }
-    button { padding:10px 14px; border-radius:999px; border:1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.08); color:#fff; cursor:pointer; }
+    input { width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background: rgba(0,0,0,.18); color:#fff; }
+    button { padding:10px 14px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.08); color:#fff; cursor:pointer; }
     button:hover { background: rgba(255,255,255,.12); }
-    ul { list-style:none; padding:0; margin:12px 0 0; }
-    li { padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.04); margin-bottom:8px; cursor:pointer; }
+    .muted { color: var(--muted); font-size:12px; }
+    .grid { display:grid; grid-template-columns: 420px 1fr; gap:12px; margin-top:12px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    ul { list-style:none; padding:0; margin:0; max-height: calc(100vh - 240px); overflow:auto; }
+    li { padding:10px 12px; border-radius:14px; border:1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.04); margin-bottom:8px; cursor:pointer; }
     li:hover { background: rgba(255,255,255,.07); }
-    pre { white-space:pre-wrap; word-break:break-word; padding:12px; border-radius:12px; background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10); }
-    .muted { opacity:.7; font-size:12px; }
+    li .k { font-size:12px; color: var(--muted); margin-top:4px; word-break:break-all; }
+    .pane { min-height: 420px; }
+    .section { margin-bottom: 14px; }
+    .section h3 { margin: 0 0 8px; font-size: 14px; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.06); font-size:12px; margin-right:6px; }
+    .chat { display:flex; flex-direction:column; gap:10px; }
+    .bubble { max-width: 82%; padding:10px 12px; border-radius: 16px; border:1px solid rgba(255,255,255,.10); line-height:1.35; }
+    .bubble.me { align-self:flex-end; background: var(--me); }
+    .bubble.them { align-self:flex-start; background: var(--them); }
+    .bubble .meta { font-size:11px; color: var(--muted); margin-top:6px; }
+    pre { white-space:pre-wrap; word-break:break-word; padding:12px; border-radius:12px; background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.10); }
   </style>
 </head>
 <body>
@@ -27,29 +47,39 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="row">
-      <div>
-        <label class="muted">Worker base URL</label>
-        <input id="baseUrl" value="https://d5de7bqfdbt3i3ft9ggb.qsvaa8tq.apigw.yandexcloud.net" />
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <div>
+          <div class="muted">Worker base URL</div>
+          <input id="baseUrl" value="https://d5de7bqfdbt3i3ft9ggb.qsvaa8tq.apigw.yandexcloud.net">
+        </div>
+        <div>
+          <div class="muted">Token (REVIEW_TOKEN)</div>
+          <input id="token" value="read-chat-1357">
+        </div>
+        <div style="flex:0 0 auto;">
+          <button id="btnLoad">Загрузить список</button>
+        </div>
       </div>
-      <div>
-        <label class="muted">Token (REVIEW_TOKEN)</label>
-        <input id="token" value="read-chat-1357" />
-      </div>
-      <div style="flex:0 0 auto;">
-        <button id="btnLoad">Загрузить список</button>
-      </div>
-    </div>
 
-    <div class="row" style="margin-top:12px;">
-      <div style="flex:1;">
-        <div class="muted" style="margin:6px 0;">Список сохранений</div>
-        <ul id="list"></ul>
-      </div>
-      <div style="flex:1; min-width:320px;">
-        <div class="muted" style="margin:6px 0;">Детали</div>
-        <pre id="details">Выберите элемент слева</pre>
+      <div class="grid">
+        <div class="card pane" style="padding:12px;">
+          <div class="section">
+            <div class="muted" style="margin-bottom:8px;">Список сохранений</div>
+            <ul id="list"></ul>
+          </div>
+        </div>
+
+        <div class="card pane" style="padding:12px;">
+          <div id="viewer" class="section">
+            <div class="muted">Выберите элемент слева</div>
+          </div>
+          <details style="margin-top:12px;">
+            <summary class="muted" style="cursor:pointer;">Показать сырой JSON</summary>
+            <pre id="raw">—</pre>
+          </details>
+        </div>
       </div>
     </div>
   </div>
@@ -60,7 +90,8 @@ const els = {
   token: document.getElementById('token'),
   btnLoad: document.getElementById('btnLoad'),
   list: document.getElementById('list'),
-  details: document.getElementById('details'),
+  viewer: document.getElementById('viewer'),
+  raw: document.getElementById('raw'),
 };
 
 function normBase(u) {
@@ -83,28 +114,140 @@ async function api(path, opts={}) {
   const base = normBase(els.baseUrl.value);
   const token = String(els.token.value||'').trim();
   const headers = Object.assign({}, opts.headers||{});
-  if (token) headers['X-Token'] = token; // IMPORTANT: backend checks X-Token or ?token=
+  if (token) headers['X-Token'] = token;
   const res = await fetch(base + path, Object.assign({}, opts, { headers }));
   const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${text.slice(0,300)}`);
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0,300)}`);
   try { return JSON.parse(text); } catch { return text; }
+}
+
+function asText(x) {
+  if (x == null) return '';
+  if (typeof x === 'string') return x;
+  if (typeof x === 'object') return (x.text || x.content || '');
+  return String(x);
+}
+
+function detectMessages(obj) {
+  // Try common shapes: obj.history, obj.dialog, obj.messages, obj.body.history, etc.
+  const candidates = [
+    obj?.history,
+    obj?.dialog,
+    obj?.messages,
+    obj?.body?.history,
+    obj?.body?.dialog,
+    obj?.result?.history,
+    obj?.payload?.history,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length) return c;
+  }
+  // Sometimes stored under obj.conversation
+  if (Array.isArray(obj?.conversation) && obj.conversation.length) return obj.conversation;
+  return null;
+}
+
+function roleLabel(r) {
+  const role = String(r||'').toLowerCase();
+  if (role === 'assistant' || role === 'client') return 'Клиент';
+  if (role === 'user' || role === 'manager') return 'Менеджер';
+  return role || 'Сообщение';
+}
+
+function isClientRole(r) {
+  const role = String(r||'').toLowerCase();
+  return (role === 'assistant' || role === 'client');
+}
+
+function renderScenario(scn) {
+  if (!scn || typeof scn !== 'object') return '';
+  const c = scn.client || scn;
+  const parts = [];
+  if (c.name) parts.push(`Клиент: ${c.name}`);
+  if (c.city) parts.push(`Город: ${c.city}`);
+  if (c.tone) parts.push(`Тон: ${c.tone}`);
+  if (c.delivery != null && c.delivery !== '') parts.push(`Доставка: ${c.delivery}`);
+  if (c.goal) parts.push(`Цель: ${c.goal}`);
+  return parts.map(p => `<span class="pill">${escapeHtml(p)}</span>`).join('');
+}
+
+function escapeHtml(s) {
+  return String(s||'')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+}
+
+function renderViewer(obj) {
+  els.viewer.innerHTML = '';
+  els.raw.textContent = JSON.stringify(obj, null, 2);
+
+  const createdAt = obj.createdAt || obj.endedAt || obj.metadata?.endedAt || obj.metadata?.createdAt || '';
+  const sid = obj.sid || obj.metadata?.sid || '';
+  const scenario = obj.scenario || obj.session?.scenario || obj.body?.scenario;
+
+  const header = document.createElement('div');
+  header.className = 'section';
+  header.innerHTML = `
+    <h3>Сводка</h3>
+    <div class="muted">${escapeHtml(createdAt ? ('Дата: ' + createdAt) : '—')}${sid ? (' · sid: ' + escapeHtml(sid)) : ''}</div>
+    <div style="margin-top:8px;">${renderScenario(scenario) || '<span class="muted">Сценарий: —</span>'}</div>
+  `;
+  els.viewer.appendChild(header);
+
+  const msgs = detectMessages(obj);
+  if (msgs) {
+    const sec = document.createElement('div');
+    sec.className = 'section';
+    sec.innerHTML = '<h3>Диалог</h3>';
+    const chat = document.createElement('div');
+    chat.className = 'chat';
+
+    msgs.forEach(m => {
+      const role = m.role || m.author || m.from || m.sender;
+      const text = asText(m);
+      if (!String(text||'').trim()) return;
+
+      const b = document.createElement('div');
+      b.className = 'bubble ' + (isClientRole(role) ? 'them' : 'me');
+      b.innerHTML = `${escapeHtml(text)}<div class="meta">${escapeHtml(roleLabel(role))}</div>`;
+      chat.appendChild(b);
+    });
+
+    sec.appendChild(chat);
+    els.viewer.appendChild(sec);
+  } else {
+    const sec = document.createElement('div');
+    sec.className = 'section';
+    sec.innerHTML = '<h3>Данные сессии</h3><div class="muted">Пока это только настройки (диалога ещё нет) или формат не распознан. Сырой JSON ниже.</div>';
+    els.viewer.appendChild(sec);
+  }
+
+  // Optional scoring
+  const score = obj.score || obj.evaluation || obj.result?.score;
+  if (score) {
+    const sec = document.createElement('div');
+    sec.className = 'section';
+    sec.innerHTML = '<h3>Оценка</h3><pre>' + escapeHtml(JSON.stringify(score, null, 2)) + '</pre>';
+    els.viewer.appendChild(sec);
+  }
 }
 
 function renderList(keys) {
   els.list.innerHTML = '';
   (keys || []).forEach(k => {
+    const key = (k.name || k.key || k);
     const li = document.createElement('li');
-    li.textContent = k.name || k.key || k;
+    li.innerHTML = `<div>${escapeHtml(key)}</div><div class="k">Нажмите, чтобы открыть</div>`;
     li.onclick = async () => {
       try {
-        els.details.textContent = 'Загрузка...';
-        const key = (k.name || k.key || k);
+        els.viewer.innerHTML = '<div class="muted">Загрузка…</div>';
         const data = await api('/get?key=' + encodeURIComponent(key));
-        els.details.textContent = JSON.stringify(data, null, 2);
+        renderViewer(data);
       } catch (e) {
-        els.details.textContent = String(e);
+        els.viewer.innerHTML = '<pre>' + escapeHtml(String(e)) + '</pre>';
       }
     };
     els.list.appendChild(li);
@@ -114,14 +257,14 @@ function renderList(keys) {
 els.btnLoad.onclick = async () => {
   savePrefs();
   try {
-    els.details.textContent = '';
+    els.viewer.innerHTML = '';
     const keys = await api('/list');
     renderList(keys);
     if (!keys || !keys.length) {
-      els.details.textContent = 'Список пуст или нет доступа.';
+      els.viewer.innerHTML = '<div class="muted">Список пуст или нет доступа.</div>';
     }
   } catch (e) {
-    alert('Forbidden/ошибка загрузки. Проверьте токен и base URL.\n\n' + e);
+    alert('Ошибка загрузки. Проверьте token и base URL.\n\n' + e);
   }
 };
 
