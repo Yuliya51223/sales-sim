@@ -215,4 +215,472 @@ function buildSession(){
     flags: null
   };
 }
+}
 
+/* ---------- Chat ---------- */
+function initChat(){
+  const sid = new URLSearchParams(location.search).get("sid") || "";
+  let session = sid ? loadSession(sid) : null;
+
+  const scenarioTitleEl = byId("scenarioTitle");
+  const scenarioMetaEl = byId("scenarioMeta");
+  const statusDotEl = byId("statusDot");
+  const statusTextEl = byId("statusText");
+  const hintEl = byId("hintText");
+  const chatEl = byId("chat");
+  const inputEl = byId("input");
+  const sendBtn = byId("sendBtn");
+  const endBtn = byId("endBtn");
+
+  if (!sid) {
+  scenarioTitleEl.textContent = "Сессия не найдена";
+  scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки.";
+  setStatus(statusDotEl, statusTextEl, "bad", "Нет sid");
+  inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true;
+  return;
+}
+
+if (!session) {
+  scenarioTitleEl.textContent = "Загрузка сессии…";
+  scenarioMetaEl.textContent = "Получаем данные с сервера…";
+  setStatus(statusDotEl, statusTextEl, "warn", "Загрузка…");
+  inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true;
+
+  loadRemoteSession(sid).then((remote) => {
+    if (!remote) {
+      scenarioTitleEl.textContent = "Сессия не найдена";
+      scenarioMetaEl.textContent = "Сессия не найдена на сервере. Создайте ссылку заново.";
+      setStatus(statusDotEl, statusTextEl, "bad", "Нет сессии");
+      return;
+    }
+    saveSession(sid, remote); // cache
+    location.reload();
+  }).catch((e) => {
+    console.error(e);
+    scenarioTitleEl.textContent = "Ошибка загрузки";
+    scenarioMetaEl.textContent = "Не удалось загрузить сессию с сервера.";
+    setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
+  });
+
+  return;
+}
+
+  const state = { sid, session, ended: !!session.endedAt };
+
+  const c = session.scenario.client;
+  scenarioTitleEl.textContent = session.scenario.title;
+  scenarioMetaEl.textContent = `Клиент: ${c.name} • ${c.city} • Тон: ${c.tone} • Доставка: ${c.delivery} • Цель: ${c.goal}`;
+
+  renderChat(chatEl, session.transcript || []);
+  ensureManagerFio(state);
+
+  if (state.session.manager?.fio && (state.session.transcript||[]).length === 0) {
+    startClientFirstMessage(state);
+  }
+
+  sendBtn.addEventListener("click", () => send());
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+
+  endBtn.addEventListener("click", async () => {
+    const scoringEnabled = (state.session?.scenario?.scoreEnabled !== false);
+    state.session.endedAt = new Date().toISOString();
+
+    if (scoringEnabled) {
+      const result = scoreConversation(state.session);
+      state.session.score = result.score;
+      state.session.flags = result.flags;
+    } else {
+      state.session.score = null;
+      state.session.flags = null;
+    }
+
+    state.ended = true;
+    saveSession(state.sid, state.session);
+
+    showScoreModal(state.session);
+    await sendResult(state);
+  });
+setHint(hintEl, "Оценка появится только после завершения.");
+  setStatus(statusDotEl, statusTextEl, "good", "Готово");
+
+  async function send(){
+    const text = (inputEl.value || "").trim();
+    if (!text) return;
+    if (state.ended) return;
+
+    sendBtn.disabled = true;
+    inputEl.value = "";
+
+    pushMsg(state.session, "user", text);
+    appendBubble(chatEl, text, "me");
+    setStatus(statusDotEl, statusTextEl, "warn", "Клиент печатает…");
+
+    try {
+      const reply = await callWorker(state, text);
+      pushMsg(state.session, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
+      appendBubble(chatEl, reply.reply, "client");
+      setStatus(statusDotEl, statusTextEl, "good", "Готово");
+    } catch (e) {
+      console.error(e);
+      setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
+      const fallback = "Похоже, связь подвисла. Отправьте сообщение ещё раз (или обновите страницу).";
+      pushMsg(state.session, "assistant", fallback, { intent: "offline", tags: ["offline"] });
+      appendBubble(chatEl, fallback, "client");
+    } finally {
+      saveSession(state.sid, state.session);
+      sendBtn.disabled = false;
+    }
+  }
+}
+
+function ensureManagerFio(state){
+  const existing = state.session.manager?.fio || "";
+  if (existing) return;
+
+  const modal = byId("fioModal");
+  const nameEl = byId("mgrName");
+  const okBtn = byId("mgrOk");
+
+  modal.classList.remove("hidden");
+  nameEl.focus();
+
+  okBtn.onclick = () => {
+    const fio = (nameEl.value || "").trim();
+    if (!fio) return;
+    state.session.manager = { fio };
+    saveSession(state.sid, state.session);
+    modal.classList.add("hidden");
+    startClientFirstMessage(state);
+  };
+}
+
+async function startClientFirstMessage(state){
+  const tr = state.session.transcript || [];
+  if (tr.length > 0) return;
+
+  const c = state.session.scenario?.client || {};
+  const objections = Array.isArray(c.objections) && c.objections.length ? (" Возможные возражения: " + c.objections.join("; ") + ".") : "";
+  const prompt = `Сгенерируй первое сообщение от клиента для начала переписки. Данные клиента: имя=${c.name||""}, город=${c.city||""}, цель=${c.goal||""}, тон=${c.tone||""}, доставка=${c.delivery||""}. Контекст: ${c.context||""}.${objections} Пиши как реальный покупатель, 1-3 предложения.`;
+
+  try {
+    const reply = await callWorker(state, prompt);
+    pushMsg(state.session, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
+    appendBubble(byId("chat"), reply.reply, "client");
+    saveSession(state.sid, state.session);
+  } catch (e) {
+    const fallback = `Здравствуйте! Меня зовут ${c.name || "клиент"}. Я из ${c.city || "вашего города"}. ${c.goal ? "Хочу " + c.goal + "." : ""} ${c.context || ""}`.trim();
+    pushMsg(state.session, "assistant", fallback, { intent: "start_fallback", tags: ["start_fallback"] });
+    appendBubble(byId("chat"), fallback, "client");
+    saveSession(state.sid, state.session);
+  }
+}
+
+async function callWorker(state, managerMsg){
+  const payload = {
+    history: (state.session.transcript||[]).map(m=>({ role:m.role, content:m.content })).slice(-12),
+    scenario: { ...state.session.scenario, manager: state.session.manager, state: { turns: (state.session.transcript||[]).length } },
+    manager_message: managerMsg
+  };
+
+  let lastErr = "";
+  for (let attempt = 0; attempt < 2; attempt++){
+    try{
+      const res = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      // Worker should ideally always return 200 with JSON; but handle non-OK just in case
+      if (!res.ok){
+        lastErr = await res.text();
+        await sleep(250 * (attempt + 1));
+        continue;
+      }
+
+      const data = await res.json();
+      return {
+        reply: String(data.reply || "Уточните, пожалуйста."),
+        intent: String(data.intent || ""),
+        tags: Array.isArray(data.tags) ? data.tags : []
+      };
+    } catch (e){
+      lastErr = String(e?.message || e);
+      await sleep(250 * (attempt + 1));
+      continue;
+    }
+  }
+
+  throw new Error(lastErr || "worker_error");
+}
+
+
+function showScoreModal(session){
+  const modal = byId("scoreModal");
+  const closeBtn = byId("scoreClose");
+  const scoreEl = byId("scoreValue");
+  const listEl = byId("checklist");
+  if (!modal || !scoreEl || !listEl) return;
+
+  const score = session.score || { total: 0, max: 0 };
+  scoreEl.textContent = `${score.total} / ${score.max}`;
+
+  listEl.innerHTML = "";
+  const grouped = groupByBlock(session.scenario.checklist || []);
+  for (const block of Object.keys(grouped)){
+    const h = document.createElement("div");
+    h.className = "small";
+    h.style.padding = "10px 0 0";
+    h.style.fontWeight = "750";
+    h.textContent = block;
+    listEl.appendChild(h);
+
+    for (const it of grouped[block]){
+      const f = (session.flags || {})[it.key];
+      const ok = f ? !!f.ok : false;
+      const badge = ok ? `+${it.points}` : "0";
+      const cls = ok ? "ok" : "no";
+      const row = document.createElement("div");
+      row.className = "checkItem";
+      row.innerHTML = `<div class="checkLeft"><div class="checkTitle">${escapeHtml(it.title)}</div></div><div class="badge ${cls}">${badge}</div>`;
+      listEl.appendChild(row);
+    }
+  }
+
+  modal.classList.remove("hidden");
+  if (closeBtn){
+    closeBtn.onclick = () => {
+      modal.classList.add("hidden");
+      try { window.close(); } catch(e) {}
+    };
+  }
+}
+
+function groupByBlock(list){
+  const out = {};
+  for (const it of (list || [])){
+    (out[it.block] ||= []).push(it);
+  }
+  return out;
+}
+
+async function sendResult(state){
+  const result = {
+    sid: state.sid,
+    createdAt: state.session.createdAt,
+    endedAt: state.session.endedAt,
+    scenario: state.session.scenario,
+    manager: state.session.manager,
+    score: state.session.score,
+    flags: state.session.flags,
+    transcript: state.session.transcript
+  };
+
+  const saveUrl = WORKER_URL + "/save";
+  try {
+    const r = await fetch(saveUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(result)
+    });
+    if (!r.ok) throw new Error(await r.text());
+  } catch(e) {
+    downloadJson(result, `result-${state.sid}.json`);
+  }
+}
+
+function scoreConversation(session){
+  const checklist = session.scenario.checklist || [];
+  const tr = session.transcript || [];
+  const client = session.scenario.client || {};
+  const mgrText = tr.filter(m=>m.role==="user").map(m=>m.content).join("\n");
+  const low = mgrText.toLowerCase();
+
+  const name = (client.name||"").trim().toLowerCase();
+  const nameCount = name ? countOcc(low, name) : 0;
+  const qCount = (mgrText.match(/\?/g) || []).length;
+
+  const interrupt = detectInterrupt(tr);
+  const grammarOk = grammarBusinessOk(mgrText);
+  const formatOk = formattingOk(mgrText);
+  const initiative = /давайте|предлагаю|могу|готов|отправлю|посчитаю|рассчитаю/i.test(low);
+  const activeListen = /понимаю|верно|правильно понял|если я правильно понял|уточню/i.test(low);
+  const whatsapp = /whatsapp|ватсап|вацап|вотсап/i.test(low);
+
+  const flags = {};
+  let total = 0, max = 0;
+
+  for (const it of checklist){
+    const pts = toInt(it.points, 1);
+    max += pts;
+    let ok = false;
+
+    switch (it.key) {
+      case "greeting": ok = /здравств|добрый день|добрый вечер|привет/i.test(low); break;
+      case "intro_self": ok = /меня зовут|я .*менеджер/i.test(low); break;
+      case "intro_company": ok = /компан|мы .* (производ|склад|завод|магазин)/i.test(low); break;
+      case "ask_client_name": ok = /как к вам обращаться|ваше имя|как вас зовут/i.test(low); break;
+      case "ask_region": ok = /какой город|какой регион|откуда вы|ваш город|где находитесь/i.test(low); break;
+
+      case "use_name_3": ok = nameCount >= 3; break;
+      case "formatting": ok = formatOk; break;
+      case "initiative": ok = initiative; break;
+      case "grammar": ok = grammarOk; break;
+      case "no_interrupt": ok = !interrupt; break;
+      case "active_listen": ok = activeListen; break;
+
+      case "open_questions": ok = (qCount >= 2) || (/как|почему|зачем|какой|какая|какие|расскажите|подскажите/i.test(mgrText) && qCount>=1); break;
+      case "purpose": ok = /кровл|крыша|забор|фасад|дач|коттедж|навес/i.test(low) || /для чего.*нуж/i.test(low); break;
+      case "object_type": ok = /жил|коммерч|промышлен|склад|тц|торгов/i.test(low); break;
+      case "thickness": ok = /толщин|\bмм\b/.test(low); break;
+      case "color": ok = /цвет|ral/i.test(low); break;
+      case "coating": ok = /покрыт|матов|глянец|цинк|полиэстер|пурал/i.test(low); break;
+      case "shape": ok = /с-?8|с-?20|с-?21|нс|н-?\d+|геркулес|супермонтеррей|штакетник|евротрапец/i.test(low); break;
+      case "calc_data": ok = /длин|периметр|скат|площад|м2|метр/i.test(low); break;
+      case "extras": ok = /добор|саморез|конек|ендов|планк|уплотн|сопутств/i.test(low); break;
+      case "summarize": ok = /итого|правильно понял|резюмир|подытож/i.test(low); break;
+
+      case "send_whatsapp": ok = whatsapp; break;
+      case "why_product": ok = /рекоменд|лучше|потому что|объясню почему/i.test(low); break;
+      case "company_benefits": ok = /в наличии|быстро|гарант|доставка|цена|качество|сертифик/i.test(low); break;
+      case "fit_needs": ok = /с учетом|исходя из|под ваши|для вашего/i.test(low); break;
+      case "present_extras": ok = /добор|сопутств|комплект/i.test(low); break;
+
+      case "feedback": ok = /как вам|остались вопросы|что скажете|подходит\?/i.test(low); break;
+
+      case "listen_no_interrupt": ok = !interrupt; break;
+      case "agree_join": ok = /понимаю|согласен|логично|конечно/i.test(low) && qCount>=1; break;
+      case "argue": ok = /потому что|объясню|разница|сравним|поэтому/i.test(low); break;
+      case "retry_sale": ok = /давайте оформим|могу посчитать|предлагаю вариант|зафиксируем|оформим/i.test(low); break;
+
+      case "next_steps": ok = /дальше|следующий шаг|отправлю расчет|кп|созвон|замер/i.test(low); break;
+      case "delivery_or_pickup": ok = /доставк|самовывоз|адрес/i.test(low); break;
+      case "crm_data": ok = /фио|юр|физ|инн|кпп|реквизит/i.test(low); break;
+      case "after_chat_whatsapp": ok = whatsapp; break;
+      case "ready_order": ok = /оформим|заказ|счет|оплат/i.test(low); break;
+      case "closing_techniques": ok = /какой вариант|удобнее|сегодня|забронируем|зафиксируем/i.test(low); break;
+      case "not_ready_order": ok = /подумайте|перезвон|как вам будет удобно/i.test(low); break;
+      case "invite_office_or_callback": ok = /офис|встреч|перезвон|созвон/i.test(low); break;
+      default: ok = false;
+    }
+
+    flags[it.key] = { ok, points: pts, block: it.block, title: it.title };
+    if (ok) total += pts;
+  }
+
+  return { flags, score: { total, max } };
+}
+
+function detectInterrupt(tr){
+  let lastUserTs = null;
+  let streak = 0;
+  for (const m of tr){
+    if (m.role === "user"){
+      const t = Date.parse(m.ts || "");
+      if (Number.isFinite(t) && lastUserTs !== null && (t - lastUserTs) <= 4000) streak += 1;
+      else streak = 1;
+      lastUserTs = t;
+      if (streak >= 2) return true;
+    } else {
+      streak = 0;
+      lastUserTs = null;
+    }
+  }
+  return false;
+}
+
+function formattingOk(text){
+  const t = String(text || "");
+  if (!t) return false;
+  const ex = (t.match(/!/g) || []).length;
+  const caps = (t.match(/\b[А-ЯЁ]{4,}\b/g) || []).length;
+  const emojis = (t.match(/[\u{1F300}-\u{1FAFF}]/gu) || []).length;
+  if (ex >= 6) return false;
+  if (caps >= 2) return false;
+  if (emojis >= 6) return false;
+  return true;
+}
+
+function grammarBusinessOk(text){
+  const t = String(text || "");
+  if (!t) return false;
+  const low = t.toLowerCase();
+  const typos = ["граммот","пожайлуста","здела","пожалуйсто","извен","вообщем","прийд","ложить","ихний","нету"];
+  let bad = 0;
+  for (const w of typos) if (low.includes(w)) bad++;
+  if (/(!!+|\?\?+|\.(4,)|,,+)/.test(t)) bad++;
+  if (t.length >= 120 && /[,.!?][А-Яа-яЁё]/.test(t)) bad++;
+  return bad <= 1;
+}
+
+function renderChat(chatEl, tr){
+  chatEl.innerHTML = "";
+  for (const m of (tr||[])) appendBubble(chatEl, m.content, m.role==="user" ? "me" : "client");
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+function appendBubble(chatEl, text, who){
+  if (!chatEl) return;
+  const row = document.createElement("div");
+  row.className = "msg " + (who==="me" ? "me" : "client");
+  const b = document.createElement("div");
+  b.className = "bubble";
+  b.textContent = text;
+  row.appendChild(b);
+  chatEl.appendChild(row);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+function pushMsg(session, role, content, meta){
+  const m = { role, content, ts: new Date().toISOString() };
+  if (meta) m.meta = meta;
+  session.transcript ||= [];
+  session.transcript.push(m);
+}
+function setStatus(dot, text, kind, label){
+  dot.classList.remove("good","warn","bad");
+  if (kind) dot.classList.add(kind);
+  text.textContent = label || "Готово";
+}
+function setHint(el, t){ el.textContent = t || ""; }
+
+function downloadJson(obj, name){
+  const blob = new Blob([JSON.stringify(obj,null,2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function saveSession(sid, session){ localStorage.setItem(`${STORAGE_NS}:session:${sid}`, JSON.stringify(session)); }
+function loadSession(sid){
+  const raw = localStorage.getItem(`${STORAGE_NS}:session:${sid}`);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+async function createRemoteSession(sid, session){
+  const r = await fetch(`${WORKER_URL}/session/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sid, session })
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return await r.json();
+}
+
+async function loadRemoteSession(sid){
+  const r = await fetch(`${WORKER_URL}/session/get?sid=${encodeURIComponent(sid)}`, { method: "GET" });
+  if (!r.ok) return null;
+  try { return await r.json(); } catch { return null; }
+}
+
+
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+function byId(id){ return document.getElementById(id); }
+function toInt(s, d){ const x = parseInt(String(s||"").trim(),10); return Number.isFinite(x)?x:d; }
+function randomId(n){ const a="abcdefghijklmnopqrstuvwxyz0123456789"; let s=""; for (let i=0;i<n;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
+function countOcc(text, sub){ let n=0,i=0; while(true){ i=text.indexOf(sub,i); if(i===-1) break; n++; i+=sub.length; } return n; }
+function escapeHtml(s){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
