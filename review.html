@@ -10,33 +10,82 @@
       --card: rgba(255,255,255,.05);
       --border: rgba(255,255,255,.12);
       --muted: rgba(255,255,255,.7);
-      --me: rgba(120,180,255,.14);
-      --them: rgba(255,255,255,.08);
+      --bg: rgba(0,0,0,.18);
+
+      --mgrBubble: rgba(255,255,255,.92);
+      --mgrText: rgba(0,0,0,.88);
+      --cliBubble: rgba(255,255,255,.08);
+      --cliText: rgba(255,255,255,.92);
     }
-    .wrap { max-width: 1220px; margin: 16px auto; padding: 0 12px; }
+
+    .wrap { max-width: 1260px; margin: 16px auto; padding: 0 12px; }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; }
     .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
-    .row > div { flex:1; min-width:220px; }
-    input { width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background: rgba(0,0,0,.18); color:#fff; }
+    .row > div { flex:1; min-width:240px; }
+    input { width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background: var(--bg); color:#fff; }
     button { padding:10px 14px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.08); color:#fff; cursor:pointer; }
     button:hover { background: rgba(255,255,255,.12); }
     .muted { color: var(--muted); font-size:12px; }
+
     .grid { display:grid; grid-template-columns: 420px 1fr; gap:12px; margin-top:12px; }
     @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
     ul { list-style:none; padding:0; margin:0; max-height: calc(100vh - 240px); overflow:auto; }
     li { padding:10px 12px; border-radius:14px; border:1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.04); margin-bottom:8px; cursor:pointer; }
     li:hover { background: rgba(255,255,255,.07); }
     li .k { font-size:12px; color: var(--muted); margin-top:4px; word-break:break-all; }
-    .pane { min-height: 420px; }
+
+    .pane { min-height: 520px; }
     .section { margin-bottom: 14px; }
     .section h3 { margin: 0 0 8px; font-size: 14px; }
-    .pill { display:inline-block; padding:4px 10px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.06); font-size:12px; margin-right:6px; }
-    .chat { display:flex; flex-direction:column; gap:10px; }
-    .bubble { max-width: 82%; padding:10px 12px; border-radius: 16px; border:1px solid rgba(255,255,255,.10); line-height:1.35; }
-    .bubble.me { align-self:flex-end; background: var(--me); }
-    .bubble.them { align-self:flex-start; background: var(--them); }
-    .bubble .meta { font-size:11px; color: var(--muted); margin-top:6px; }
-    pre { white-space:pre-wrap; word-break:break-word; padding:12px; border-radius:12px; background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.10); }
+
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.06); font-size:12px; margin: 0 6px 6px 0; }
+
+    .chat { display:flex; flex-direction:column; gap:12px; padding: 6px 2px; }
+    .msgRow { display:flex; }
+    .msgRow.me { justify-content:flex-end; }
+    .msgRow.them { justify-content:flex-start; }
+    .bubble {
+      max-width: 82%;
+      padding:12px 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.10);
+      line-height: 1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .bubble.me {
+      background: var(--mgrBubble);
+      color: var(--mgrText);
+      border-color: rgba(255,255,255,.18);
+    }
+    .bubble.them {
+      background: var(--cliBubble);
+      color: var(--cliText);
+    }
+    .meta { font-size:11px; color: var(--muted); margin-top:6px; }
+
+    details summary { cursor:pointer; }
+    pre { white-space:pre-wrap; word-break:break-word; padding:12px; border-radius:12px; background: var(--bg); border:1px solid rgba(255,255,255,.10); }
+
+    /* Score table */
+    .scoreHeader { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .scoreBig { font-size: 22px; font-weight: 700; }
+    .scoreBar {
+      height: 8px; border-radius: 999px; background: rgba(255,255,255,.10);
+      overflow:hidden; flex: 1; min-width: 200px;
+    }
+    .scoreBar > div { height:100%; background: rgba(120,180,255,.55); width:0%; }
+    .scoreBlock { margin-top: 10px; padding: 10px; border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.03); border-radius: 14px; }
+    .scoreBlockTitle { font-size: 13px; margin: 0 0 8px; color: rgba(255,255,255,.92); }
+    .scoreRow { display:flex; gap:10px; justify-content:space-between; align-items:flex-start; padding: 8px 10px; border-radius: 12px; }
+    .scoreRow:nth-child(odd) { background: rgba(255,255,255,.02); }
+    .scoreLeft { display:flex; gap:10px; align-items:flex-start; }
+    .mark { width:18px; height:18px; border-radius: 6px; display:inline-flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,.18); margin-top:2px; }
+    .mark.ok { background: rgba(90,200,140,.22); }
+    .mark.no { background: rgba(255,120,120,.14); }
+    .scoreTitle { font-size: 13px; }
+    .pts { font-size: 12px; color: var(--muted); white-space:nowrap; padding-top:2px; }
   </style>
 </head>
 <body>
@@ -67,6 +116,7 @@
         <div class="card pane" style="padding:12px;">
           <div class="section">
             <div class="muted" style="margin-bottom:8px;">Список сохранений</div>
+            <div class="muted" style="margin-bottom:10px;">Подсказка: диалоги — ключи, которые начинаются с <b>s_</b>. Ключи <b>sess:</b> — это только настройки.</div>
             <ul id="list"></ul>
           </div>
         </div>
@@ -75,8 +125,9 @@
           <div id="viewer" class="section">
             <div class="muted">Выберите элемент слева</div>
           </div>
+
           <details style="margin-top:12px;">
-            <summary class="muted" style="cursor:pointer;">Показать сырой JSON</summary>
+            <summary class="muted">Показать сырой JSON</summary>
             <pre id="raw">—</pre>
           </details>
         </div>
@@ -97,12 +148,10 @@ const els = {
 function normBase(u) {
   return String(u||'').trim().replace(/\/+$/,'');
 }
-
 function savePrefs() {
   localStorage.setItem('review_baseUrl', els.baseUrl.value);
   localStorage.setItem('review_token', els.token.value);
 }
-
 function loadPrefs() {
   const b = localStorage.getItem('review_baseUrl');
   const t = localStorage.getItem('review_token');
@@ -121,56 +170,6 @@ async function api(path, opts={}) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
-function asText(x) {
-  if (x == null) return '';
-  if (typeof x === 'string') return x;
-  if (typeof x === 'object') return (x.text || x.content || '');
-  return String(x);
-}
-
-function detectMessages(obj) {
-  // Try common shapes: obj.history, obj.dialog, obj.messages, obj.body.history, etc.
-  const candidates = [
-    obj?.history,
-    obj?.dialog,
-    obj?.messages,
-    obj?.body?.history,
-    obj?.body?.dialog,
-    obj?.result?.history,
-    obj?.payload?.history,
-  ];
-  for (const c of candidates) {
-    if (Array.isArray(c) && c.length) return c;
-  }
-  // Sometimes stored under obj.conversation
-  if (Array.isArray(obj?.conversation) && obj.conversation.length) return obj.conversation;
-  return null;
-}
-
-function roleLabel(r) {
-  const role = String(r||'').toLowerCase();
-  if (role === 'assistant' || role === 'client') return 'Клиент';
-  if (role === 'user' || role === 'manager') return 'Менеджер';
-  return role || 'Сообщение';
-}
-
-function isClientRole(r) {
-  const role = String(r||'').toLowerCase();
-  return (role === 'assistant' || role === 'client');
-}
-
-function renderScenario(scn) {
-  if (!scn || typeof scn !== 'object') return '';
-  const c = scn.client || scn;
-  const parts = [];
-  if (c.name) parts.push(`Клиент: ${c.name}`);
-  if (c.city) parts.push(`Город: ${c.city}`);
-  if (c.tone) parts.push(`Тон: ${c.tone}`);
-  if (c.delivery != null && c.delivery !== '') parts.push(`Доставка: ${c.delivery}`);
-  if (c.goal) parts.push(`Цель: ${c.goal}`);
-  return parts.map(p => `<span class="pill">${escapeHtml(p)}</span>`).join('');
-}
-
 function escapeHtml(s) {
   return String(s||'')
     .replaceAll('&','&amp;')
@@ -180,20 +179,172 @@ function escapeHtml(s) {
     .replaceAll("'","&#039;");
 }
 
+function asText(x) {
+  if (x == null) return '';
+  if (typeof x === 'string') return x;
+  if (typeof x === 'object') return (x.content || x.text || '');
+  return String(x);
+}
+
+function detectMessages(obj) {
+  const candidates = [
+    obj?.transcript,
+    obj?.session?.transcript,
+    obj?.history,
+    obj?.dialog,
+    obj?.messages,
+    obj?.body?.history,
+    obj?.result?.history,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length) return c;
+  }
+  return null;
+}
+
+function pickScenario(obj) {
+  return obj?.scenario || obj?.session?.scenario || obj?.body?.scenario || null;
+}
+
+function pickManagerFio(obj) {
+  return obj?.manager?.fio
+      || obj?.session?.manager?.fio
+      || obj?.scenario?.manager?.fio
+      || obj?.session?.scenario?.manager?.fio
+      || '';
+}
+
+function renderScenarioPills(obj) {
+  const scn = pickScenario(obj);
+  const mFio = pickManagerFio(obj);
+  const c = scn?.client || scn || {};
+
+  const pills = [];
+  if (mFio) pills.push(`Менеджер: ${mFio}`);
+  if (c.name) pills.push(`Клиент: ${c.name}`);
+  if (c.city) pills.push(`Город: ${c.city}`);
+  if (c.tone) pills.push(`Тон: ${c.tone}`);
+  if (c.delivery != null && c.delivery !== '') pills.push(`Доставка: ${c.delivery}`);
+  if (c.goal) pills.push(`Цель: ${c.goal}`);
+
+  return pills.map(p => `<span class="pill">${escapeHtml(p)}</span>`).join('');
+}
+
+function isManagerRole(r) {
+  const role = String(r||'').toLowerCase();
+  return (role === 'user' || role === 'manager');
+}
+function roleLabel(r) {
+  return isManagerRole(r) ? 'Менеджер' : 'Клиент';
+}
+
+function renderChat(msgs) {
+  const chat = document.createElement('div');
+  chat.className = 'chat';
+
+  (msgs||[]).forEach(m => {
+    const role = m.role || m.author || m.from || m.sender;
+    const text = asText(m);
+    if (!String(text||'').trim()) return;
+
+    const row = document.createElement('div');
+    const me = isManagerRole(role);
+    row.className = 'msgRow ' + (me ? 'me' : 'them');
+
+    const b = document.createElement('div');
+    b.className = 'bubble ' + (me ? 'me' : 'them');
+    b.innerHTML = escapeHtml(text);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = roleLabel(role) + (m.ts ? (' · ' + m.ts) : '');
+
+    b.appendChild(meta);
+    row.appendChild(b);
+    chat.appendChild(row);
+  });
+
+  return chat;
+}
+
+function groupFlags(flagsObj) {
+  // flags: { key: {ok, points, block, title} }
+  const arr = [];
+  for (const [k, v] of Object.entries(flagsObj||{})) {
+    if (!v || typeof v !== 'object') continue;
+    arr.push({ key: k, ok: !!v.ok, points: Number(v.points||0), block: v.block || 'Без блока', title: v.title || k });
+  }
+  arr.sort((a,b)=> (a.block||'').localeCompare(b.block||'') || (a.title||'').localeCompare(b.title||''));
+  const grouped = new Map();
+  for (const it of arr) {
+    if (!grouped.has(it.block)) grouped.set(it.block, []);
+    grouped.get(it.block).push(it);
+  }
+  return grouped;
+}
+
+function renderScore(obj) {
+  const score = obj?.score || obj?.session?.score || null;
+  const flags = obj?.flags || obj?.session?.flags || null;
+  if (!score && !flags) return null;
+
+  const sec = document.createElement('div');
+  sec.className = 'section';
+  sec.innerHTML = '<h3>Оценка</h3>';
+
+  if (score && typeof score === 'object') {
+    const total = Number(score.total||0);
+    const max = Math.max(1, Number(score.max||0));
+    const pct = Math.max(0, Math.min(100, Math.round((total/max)*100)));
+
+    const head = document.createElement('div');
+    head.className = 'scoreHeader';
+    head.innerHTML = `
+      <div class="scoreBig">${escapeHtml(String(total))} / ${escapeHtml(String(max))}</div>
+      <div class="scoreBar"><div style="width:${pct}%"></div></div>
+      <div class="muted">${pct}%</div>
+    `;
+    sec.appendChild(head);
+  }
+
+  if (flags && typeof flags === 'object') {
+    const grouped = groupFlags(flags);
+    for (const [block, items] of grouped.entries()) {
+      const blk = document.createElement('div');
+      blk.className = 'scoreBlock';
+      blk.innerHTML = `<div class="scoreBlockTitle">${escapeHtml(block)}</div>`;
+      for (const it of items) {
+        const row = document.createElement('div');
+        row.className = 'scoreRow';
+        row.innerHTML = `
+          <div class="scoreLeft">
+            <div class="mark ${it.ok ? 'ok' : 'no'}">${it.ok ? '✓' : '×'}</div>
+            <div class="scoreTitle">${escapeHtml(it.title)}</div>
+          </div>
+          <div class="pts">${it.ok ? '+' : '0'}${escapeHtml(String(it.points||0))}</div>
+        `;
+        blk.appendChild(row);
+      }
+      sec.appendChild(blk);
+    }
+  }
+
+  return sec;
+}
+
 function renderViewer(obj) {
   els.viewer.innerHTML = '';
   els.raw.textContent = JSON.stringify(obj, null, 2);
 
   const createdAt = obj.createdAt || obj.endedAt || obj.metadata?.endedAt || obj.metadata?.createdAt || '';
   const sid = obj.sid || obj.metadata?.sid || '';
-  const scenario = obj.scenario || obj.session?.scenario || obj.body?.scenario;
 
   const header = document.createElement('div');
   header.className = 'section';
   header.innerHTML = `
     <h3>Сводка</h3>
-    <div class="muted">${escapeHtml(createdAt ? ('Дата: ' + createdAt) : '—')}${sid ? (' · sid: ' + escapeHtml(sid)) : ''}</div>
-    <div style="margin-top:8px;">${renderScenario(scenario) || '<span class="muted">Сценарий: —</span>'}</div>
+    <div class="muted">${escapeHtml(createdAt ? ('Дата: ' + createdAt) : '—')}${sid ? (' · sid: ' + sid) : ''}</div>
+    <div style="margin-top:8px;">${renderScenarioPills(obj) || '<span class="muted">—</span>'}</div>
   `;
   els.viewer.appendChild(header);
 
@@ -202,37 +353,17 @@ function renderViewer(obj) {
     const sec = document.createElement('div');
     sec.className = 'section';
     sec.innerHTML = '<h3>Диалог</h3>';
-    const chat = document.createElement('div');
-    chat.className = 'chat';
-
-    msgs.forEach(m => {
-      const role = m.role || m.author || m.from || m.sender;
-      const text = asText(m);
-      if (!String(text||'').trim()) return;
-
-      const b = document.createElement('div');
-      b.className = 'bubble ' + (isClientRole(role) ? 'them' : 'me');
-      b.innerHTML = `${escapeHtml(text)}<div class="meta">${escapeHtml(roleLabel(role))}</div>`;
-      chat.appendChild(b);
-    });
-
-    sec.appendChild(chat);
+    sec.appendChild(renderChat(msgs));
     els.viewer.appendChild(sec);
   } else {
     const sec = document.createElement('div');
     sec.className = 'section';
-    sec.innerHTML = '<h3>Данные сессии</h3><div class="muted">Пока это только настройки (диалога ещё нет) или формат не распознан. Сырой JSON ниже.</div>';
+    sec.innerHTML = '<h3>Данные сессии</h3><div class="muted">Это похоже на настройки (без переписки) или формат не распознан. Сырой JSON ниже.</div>';
     els.viewer.appendChild(sec);
   }
 
-  // Optional scoring
-  const score = obj.score || obj.evaluation || obj.result?.score;
-  if (score) {
-    const sec = document.createElement('div');
-    sec.className = 'section';
-    sec.innerHTML = '<h3>Оценка</h3><pre>' + escapeHtml(JSON.stringify(score, null, 2)) + '</pre>';
-    els.viewer.appendChild(sec);
-  }
+  const scoreSec = renderScore(obj);
+  if (scoreSec) els.viewer.appendChild(scoreSec);
 }
 
 function renderList(keys) {
@@ -240,7 +371,11 @@ function renderList(keys) {
   (keys || []).forEach(k => {
     const key = (k.name || k.key || k);
     const li = document.createElement('li');
-    li.innerHTML = `<div>${escapeHtml(key)}</div><div class="k">Нажмите, чтобы открыть</div>`;
+    const isSess = String(key).startsWith('sess:');
+    li.innerHTML = `
+      <div>${escapeHtml(key)}</div>
+      <div class="k">${isSess ? 'Настройки (sess:...)' : 'Диалог/результат (s_...)'}</div>
+    `;
     li.onclick = async () => {
       try {
         els.viewer.innerHTML = '<div class="muted">Загрузка…</div>';
@@ -264,7 +399,9 @@ els.btnLoad.onclick = async () => {
       els.viewer.innerHTML = '<div class="muted">Список пуст или нет доступа.</div>';
     }
   } catch (e) {
-    alert('Ошибка загрузки. Проверьте token и base URL.\n\n' + e);
+    alert('Ошибка загрузки. Проверьте token и base URL.
+
+' + e);
   }
 };
 
