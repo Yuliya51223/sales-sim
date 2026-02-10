@@ -141,12 +141,6 @@ function initSetup(){
     clearTimeout(window.__linkToastT);
     window.__linkToastT = setTimeout(()=>{ toast.style.display = "none"; }, 2000);
   }
-} const toast = byId("linkCreated");
-  if (toast){
-    toast.style.display = "";
-    clearTimeout(window.__linkToastT);
-    window.__linkToastT = setTimeout(()=>{ toast.style.display = "none"; }, 2000);
-  }
 });
 
   byId("copyBtn")?.addEventListener("click", async () => {
