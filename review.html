@@ -3,136 +3,129 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Просмотр результатов</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <title>Просмотр диалогов</title>
+  <link rel="stylesheet" href="styles.css" />
   <style>
-    .grid{display:grid;grid-template-columns:340px 1fr;gap:14px;max-width:1200px;margin:0 auto;padding:14px}
-    .list{max-height:80vh;overflow:auto}
-    .item{padding:10px;border:1px solid var(--line);border-radius:12px;cursor:pointer;margin-bottom:8px}
-    .item:hover{opacity:.9}
+    .card { max-width: 980px; margin: 16px auto; padding: 16px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+    .row > div { flex:1; min-width:220px; }
+    input { width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color:#fff; }
+    button { padding:10px 14px; border-radius:999px; border:1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.08); color:#fff; cursor:pointer; }
+    button:hover { background: rgba(255,255,255,.12); }
+    ul { list-style:none; padding:0; margin:12px 0 0; }
+    li { padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.04); margin-bottom:8px; cursor:pointer; }
+    li:hover { background: rgba(255,255,255,.07); }
+    pre { white-space:pre-wrap; word-break:break-word; padding:12px; border-radius:12px; background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10); }
+    .muted { opacity:.7; font-size:12px; }
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">🗂️</div>
+  <div class="topbar">
+    <div class="topbar__left">
+      <div class="logo">Просмотр диалогов</div>
+      <div class="muted">Токен нужен только для просмотра</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
       <div>
-        <div class="title">Просмотр диалогов</div>
-        <div class="subtitle">Cloudflare KV</div>
+        <label class="muted">Worker base URL</label>
+        <input id="baseUrl" value="https://d5de7bqfdbt3i3ft9ggb.qsvaa8tq.apigw.yandexcloud.net" />
+      </div>
+      <div>
+        <label class="muted">Token (REVIEW_TOKEN)</label>
+        <input id="token" value="read-chat-1357" />
+      </div>
+      <div style="flex:0 0 auto;">
+        <button id="btnLoad">Загрузить список</button>
       </div>
     </div>
-  </header>
 
-  <div class="grid">
-    <section class="card">
-      <div class="cardHead">
-        <div class="hgroup">
-          <h2>Доступ</h2>
-          <div class="meta">Токен нужен только для просмотра</div>
-        </div>
+    <div class="row" style="margin-top:12px;">
+      <div style="flex:1;">
+        <div class="muted" style="margin:6px 0;">Список сохранений</div>
+        <ul id="list"></ul>
       </div>
-      <div class="form">
-        <label class="field">
-          <span>Worker base URL</span>
-          <input id="base" value="https://royal-breeze-aac8.julya14temina.workers.dev" />
-        </label>
-        <label class="field">
-          <span>Token</span>
-          <input id="token" placeholder="REVIEW_TOKEN" />
-        </label>
-        <button id="load" class="btn" type="button">Загрузить список</button>
+      <div style="flex:1; min-width:320px;">
+        <div class="muted" style="margin:6px 0;">Детали</div>
+        <pre id="details">Выберите элемент слева</pre>
       </div>
-
-      <div class="list" id="keys"></div>
-    </section>
-
-    <section class="card">
-      <div class="cardHead">
-        <div class="hgroup">
-          <h2 id="title">Выберите диалог слева</h2>
-          <div id="meta" class="meta"></div>
-        </div>
-      </div>
-
-      <div id="chat" class="chat"></div>
-
-      <div class="card" style="margin-top:12px;">
-        <div class="hgroup">
-          <h3 class="h3">Оценка</h3>
-          <div class="meta" id="score">—</div>
-        </div>
-        <div id="rubric" class="checklist"></div>
-      </div>
-    </section>
+    </div>
   </div>
 
 <script>
-  const byId = (id)=>document.getElementById(id);
+const els = {
+  baseUrl: document.getElementById('baseUrl'),
+  token: document.getElementById('token'),
+  btnLoad: document.getElementById('btnLoad'),
+  list: document.getElementById('list'),
+  details: document.getElementById('details'),
+};
 
-  byId("load").onclick = async ()=>{
-    const base = byId("base").value.replace(/\/$/,"");
-    const token = byId("token").value.trim();
-    const r = await fetch(base + "/list", { headers: { "X-Token": token } });
-    if(!r.ok){ alert(await r.text()); return; }
-    const keys = await r.json();
-    renderKeys(keys, base, token);
-  };
+function normBase(u) {
+  return String(u||'').trim().replace(/\/+$/,'');
+}
 
-  function renderKeys(keys, base, token){
-    const host = byId("keys");
-    host.innerHTML = "";
-    keys.reverse().forEach(k=>{
-      const d = document.createElement("div");
-      d.className = "item";
-      d.textContent = k.name;
-      d.onclick = ()=>loadOne(base, token, k.name);
-      host.appendChild(d);
-    });
+function savePrefs() {
+  localStorage.setItem('review_baseUrl', els.baseUrl.value);
+  localStorage.setItem('review_token', els.token.value);
+}
+
+function loadPrefs() {
+  const b = localStorage.getItem('review_baseUrl');
+  const t = localStorage.getItem('review_token');
+  if (b) els.baseUrl.value = b;
+  if (t) els.token.value = t;
+}
+
+async function api(path, opts={}) {
+  const base = normBase(els.baseUrl.value);
+  const token = String(els.token.value||'').trim();
+  const headers = Object.assign({}, opts.headers||{});
+  if (token) headers['X-Token'] = token; // IMPORTANT: backend checks X-Token or ?token=
+  const res = await fetch(base + path, Object.assign({}, opts, { headers }));
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${text.slice(0,300)}`);
   }
+  try { return JSON.parse(text); } catch { return text; }
+}
 
-  async function loadOne(base, token, key){
-    const r = await fetch(base + "/get?key=" + encodeURIComponent(key), { headers: { "X-Token": token } });
-    if(!r.ok){ alert(await r.text()); return; }
-    const data = await r.json();
-    render(data);
+function renderList(keys) {
+  els.list.innerHTML = '';
+  (keys || []).forEach(k => {
+    const li = document.createElement('li');
+    li.textContent = k.name || k.key || k;
+    li.onclick = async () => {
+      try {
+        els.details.textContent = 'Загрузка...';
+        const key = (k.name || k.key || k);
+        const data = await api('/get?key=' + encodeURIComponent(key));
+        els.details.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        els.details.textContent = String(e);
+      }
+    };
+    els.list.appendChild(li);
+  });
+}
+
+els.btnLoad.onclick = async () => {
+  savePrefs();
+  try {
+    els.details.textContent = '';
+    const keys = await api('/list');
+    renderList(keys);
+    if (!keys || !keys.length) {
+      els.details.textContent = 'Список пуст или нет доступа.';
+    }
+  } catch (e) {
+    alert('Forbidden/ошибка загрузки. Проверьте токен и base URL.\n\n' + e);
   }
+};
 
-  function render(data){
-    byId("title").textContent = data.scenario?.title || "Диалог";
-    const m = data.manager?.fio ? `Менеджер: ${data.manager.fio}` : "";
-    const c = data.scenario?.client?.name ? `Клиент: ${data.scenario.client.name}` : "";
-    const t = data.endedAt ? `Завершено: ${data.endedAt}` : "";
-    byId("meta").textContent = [m,c,t].filter(Boolean).join(" • ");
-
-    const s = data.score ? `${data.score.total} / ${data.score.max}` : "—";
-    byId("score").textContent = s;
-
-    const chat = byId("chat");
-    chat.innerHTML = "";
-    (data.transcript||[]).forEach(x=>{
-      const row = document.createElement("div");
-      row.className = "msg " + (x.role==="user" ? "me" : "client");
-      const b = document.createElement("div");
-      b.className = "bubble";
-      b.textContent = x.content || "";
-      row.appendChild(b);
-      chat.appendChild(row);
-    });
-
-    const rubric = byId("rubric");
-    rubric.innerHTML = "";
-    const list = data.scenario?.checklist || [];
-    const flags = data.flags || {};
-    list.forEach(it=>{
-      const f = flags[it.key] || {};
-      const ok = !!f.ok;
-      const row = document.createElement("div");
-      row.className = "checkItem";
-      row.innerHTML = `<div class="checkLeft"><div class="checkTitle">${it.title}</div></div>
-                       <div class="badge ${ok ? "ok":"no"}">${ok ? "+"+it.points : "0"}</div>`;
-      rubric.appendChild(row);
-    });
-  }
+loadPrefs();
 </script>
 </body>
 </html>
