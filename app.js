@@ -188,6 +188,7 @@ function buildSession(){
         checklist.push({ key: it.id, block: cat.block, title: it.label, points });
       }
     }
+  }
 
   const objections = (byId("c_objections")?.value || "").split("\n").map(s=>s.trim()).filter(Boolean);
 
@@ -213,7 +214,6 @@ function buildSession(){
     score: null,
     flags: null
   };
-}
 }
 
 /* ---------- Chat ---------- */
@@ -660,11 +660,25 @@ function loadSession(sid){
 }
 
 async function createRemoteSession(sid, session){
-  const r = await fetch(`${WORKER_URL}/session/create`, {
+  // primary attempt
+  let r = await fetch(`${WORKER_URL}/session/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sid, session })
   });
+
+  // Some gateways may validate payload strictly; if scoring is disabled and we got 400,
+  // retry once without the optional flag.
+  if (!r.ok && r.status === 400 && session?.scenario?.scoreEnabled === false) {
+    const session2 = JSON.parse(JSON.stringify(session));
+    if (session2?.scenario) delete session2.scenario.scoreEnabled;
+    r = await fetch(`${WORKER_URL}/session/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sid, session: session2 })
+    });
+  }
+
   if (!r.ok) throw new Error(await r.text());
   return await r.json();
 }
