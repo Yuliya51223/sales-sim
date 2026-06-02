@@ -5,7 +5,7 @@
    - результат (диалог + оценка) отправляется на Worker /save (Cloudflare KV/D1) с fallback на скачивание
 */
 
-const WORKER_URL = "https://d5de7bqfdbt3i3ft9ggb.qsvaa8tq.apigw.yandexcloud.net";
+const WORKER_URL = "https://royal-breeze-aac8.julya14temina.workers.dev";
 
 const STORAGE_NS = "sales-sim:v15";
 
@@ -21,8 +21,7 @@ const RUBRIC_CATALOG = [
     { id:"use_name_3", label:"Использует имя клиента в разговоре 3 и более раз" },
     { id:"formatting", label:"Уверенность в голосе/ соблюдение норм оформления сообщений в чате" },
     { id:"initiative", label:"Проявляет инициативу в разговоре" },
-    { id:"grammar", label:"Грамотная деловая речь" },
-    { id:"no_interrupt", label:"Не перебивает клиента/не говорит одновременно с клиентом" },
+    { id:"grammar", label:"Грамотная деловая речь (проверка грамотности менеджера в диалоге)" },
     { id:"active_listen", label:"Использует техники активного слушания" }
   ]},
   { block: "Выявление потребностей", items: [
@@ -38,7 +37,6 @@ const RUBRIC_CATALOG = [
     { id:"summarize", label:"Резюмирует информацию" }
   ]},
   { block: "Презентация", items: [
-    { id:"send_whatsapp", label:"Предлагает отправить на WhatsApp фото/счета и др. информацию для презентации" },
     { id:"why_product", label:"Объясняет, почему предлагает продукт / озвучивает рекомендованную толщину, если клиент не знает" },
     { id:"company_benefits", label:"Проговаривает преимущества компании" },
     { id:"fit_needs", label:"Презентация и преимущества материала соответствуют выявленным потребностям клиента" },
@@ -57,10 +55,9 @@ const RUBRIC_CATALOG = [
     { id:"next_steps", label:"Рассказывает о дальнейших шагах" },
     { id:"delivery_or_pickup", label:"Уточняет доставка или самовывоз, узнал адрес доставки" },
     { id:"crm_data", label:"Уточняет информацию для карточки клиента (ФИО, юр/физ для amoCRM)" },
-    { id:"after_chat_whatsapp", label:"После звонка продолжил общение в WhatsApp" },
-    { id:"ready_order", label:"Если клиент готов оформить заказ" },
+    { id:"label_ready_order", label:"Если клиент готов оформить заказ", type:"label" },
     { id:"closing_techniques", label:"Использует техники завершения сделки (прямой/альтернативный вопрос, 3 \"да\", спешка и др.)" },
-    { id:"not_ready_order", label:"Если клиент не готов оформить заказ" },
+    { id:"label_not_ready_order", label:"Если клиент не готов оформить заказ", type:"label" },
     { id:"invite_office_or_callback", label:"Пригласил в офис к назначенному дню и времени / назначил перезвон" }
   ]}
 ];
@@ -78,33 +75,9 @@ function initSetup(){
 
   renderRubricBlocks();
 
-
-  // scoring toggle
-  const scoreToggle = byId("scoreEnabled");
-  const rubricSection = byId("rubricSection");
-  const scoreLabel = scoreToggle?.closest(".toggle")?.querySelector("span");
-
-  function applyScoreToggle(){
-    const on = (scoreToggle?.checked !== false);
-    if (rubricSection) rubricSection.style.display = on ? "" : "none";
-    // disable rubric inputs when off
-    for (const cat of RUBRIC_CATALOG){
-      for (const it of cat.items){
-        const cb = byId(`rb_${it.id}`);
-        const pt = byId(`pt_${it.id}`);
-        if (cb) cb.disabled = !on;
-        if (pt) pt.disabled = !on;
-      }
-    }
-    if (scoreLabel) scoreLabel.textContent = on ? "Оценка включена" : "Оценка выключена";
-  }
-
-  scoreToggle?.addEventListener("change", applyScoreToggle);
-  applyScoreToggle();
-
-
   for (const cat of RUBRIC_CATALOG){
     for (const it of cat.items){
+      if (it.type === "label") continue;
       const cb = byId(`rb_${it.id}`);
       const pt = byId(`pt_${it.id}`);
       if (cb) cb.checked = true;
@@ -127,20 +100,13 @@ function initSetup(){
     alert("Не удалось сохранить сессию на сервере. Ссылка откроется только на этом устройстве.\n\nПроверьте Worker (/session/create) и CORS.");
   }
 
-  const url = new URL(location.origin + location.pathname);
-  url.search = "";
-  url.hash = "";
+  const url = new URL(location.href);
   url.pathname = url.pathname.replace(/index\.html$/i, "chat.html").replace(/\/$/, "/chat.html");
+  url.search = "";
   url.searchParams.set("sid", sid);
 
   const out = byId("linkOut");
   if (out) out.value = url.toString();
-  const toast = byId("linkCreated");
-  if (toast){
-    toast.style.display = "";
-    clearTimeout(window.__linkToastT);
-    window.__linkToastT = setTimeout(()=>{ toast.style.display = "none"; }, 2000);
-  }
 });
 
   byId("copyBtn")?.addEventListener("click", async () => {
@@ -162,7 +128,15 @@ function renderRubricBlocks(){
     const grid = document.createElement("div");
     grid.className = "rubricGrid";
     for (const it of cat.items){
-      const item = document.createElement("div");
+if (it.type === "label") {
+  const lbl = document.createElement("div");
+  lbl.className = "rubricLabel";
+  lbl.textContent = it.label;
+  grid.appendChild(lbl);
+  continue;
+}
+
+const item = document.createElement("div");
       item.className = "rubricItem";
       item.innerHTML = `<input type="checkbox" id="rb_${it.id}"><label for="rb_${it.id}">${escapeHtml(it.label)}</label>`;
       const pts = document.createElement("div");
@@ -177,19 +151,15 @@ function renderRubricBlocks(){
 }
 
 function buildSession(){
-  const scoringEnabled = (byId("scoreEnabled")?.checked !== false);
-
   const checklist = [];
-  if (scoringEnabled){
-    for (const cat of RUBRIC_CATALOG){
-      for (const it of cat.items){
-        if (!byId(`rb_${it.id}`)?.checked) continue;
-        const points = toInt(byId(`pt_${it.id}`)?.value, 1);
-        checklist.push({ key: it.id, block: cat.block, title: it.label, points });
-      }
+  for (const cat of RUBRIC_CATALOG){
+    for (const it of cat.items){
+      if (it.type === "label") continue;
+      if (!byId(`rb_${it.id}`)?.checked) continue;
+      const points = toInt(byId(`pt_${it.id}`)?.value, 1);
+      checklist.push({ key: it.id, block: cat.block, title: it.label, points });
     }
   }
-
   const objections = (byId("c_objections")?.value || "").split("\n").map(s=>s.trim()).filter(Boolean);
 
   return {
@@ -205,8 +175,7 @@ function buildSession(){
         context: (byId("c_context")?.value || "").trim(),
         objections
       },
-      checklist,
-      scoreEnabled: scoringEnabled
+      checklist
     },
     transcript: [],
     manager: { fio: "" },
@@ -283,28 +252,45 @@ if (!session) {
   });
 
   endBtn.addEventListener("click", async () => {
-    const scoringEnabled = (state.session?.scenario?.scoreEnabled !== false);
+    const result = scoreConversation(state.session);
     state.session.endedAt = new Date().toISOString();
-
-    if (scoringEnabled) {
-      const result = scoreConversation(state.session);
-      state.session.score = result.score;
-      state.session.flags = result.flags;
-    } else {
-      state.session.score = null;
-      state.session.flags = null;
-    }
-
+    state.session.score = result.score;
+    state.session.flags = result.flags;
     state.ended = true;
     saveSession(state.sid, state.session);
 
     showScoreModal(state.session);
     await sendResult(state);
   });
-setHint(hintEl, "Оценка появится только после завершения.");
+
+  setHint(hintEl, "Оценка появится только после завершения.");
   setStatus(statusDotEl, statusTextEl, "good", "Готово");
 
-  async function send(){
+  function normalizeObjection(s){ return String(s||"").trim(); }
+
+function getRemainingObjections(session){
+  const all = (session?.scenario?.client?.objections || []).map(normalizeObjection).filter(Boolean);
+  const used = (session?.usedObjections || []).map(normalizeObjection).filter(Boolean);
+  return all.filter(o => !used.includes(o));
+}
+
+function markObjectionUsed(session, objection){
+  const o = normalizeObjection(objection);
+  if (!o) return;
+  if (!Array.isArray(session.usedObjections)) session.usedObjections = [];
+  if (!session.usedObjections.includes(o)) session.usedObjections.push(o);
+}
+
+// Возражения появляются со 100% вероятностью: выдаём следующее возражение после 2-го сообщения менеджера, затем каждое следующее.
+function nextForcedObjection(session){
+  const remaining = getRemainingObjections(session);
+  if (!remaining.length) return null;
+  const managerTurns = (session?.transcript || []).filter(m => m.role === "user").length;
+  if (managerTurns < 2) return null;
+  return remaining[0];
+}
+
+async function send(){
     const text = (inputEl.value || "").trim();
     if (!text) return;
     if (state.ended) return;
@@ -316,6 +302,18 @@ setHint(hintEl, "Оценка появится только после заве�
     appendBubble(chatEl, text, "me");
     setStatus(statusDotEl, statusTextEl, "warn", "Клиент печатает…");
 
+    // Force objections: гарантируем, что все указанные возражения появятся в диалоге
+    const forced = nextForcedObjection(state.session);
+    if (forced) {
+      pushMsg(state.session, "assistant", forced, { intent: "objection_forced", tags: ["objection","forced"] });
+      appendBubble(chatEl, forced, "client");
+      markObjectionUsed(state.session, forced);
+      setStatus(statusDotEl, statusTextEl, "good", "Готово");
+      saveSession(state.sid, state.session);
+      sendBtn.disabled = false;
+      return;
+    }
+
     try {
       const reply = await callWorker(state, text);
       pushMsg(state.session, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
@@ -324,7 +322,7 @@ setHint(hintEl, "Оценка появится только после заве�
     } catch (e) {
       console.error(e);
       setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
-      const fallback = "Похоже, связь подвисла. Отправьте сообщение ещё раз (или обновите страницу).";
+      const fallback = "Не понял. Можете уточнить?";
       pushMsg(state.session, "assistant", fallback, { intent: "offline", tags: ["offline"] });
       appendBubble(chatEl, fallback, "client");
     } finally {
@@ -382,39 +380,19 @@ async function callWorker(state, managerMsg){
     scenario: { ...state.session.scenario, manager: state.session.manager, state: { turns: (state.session.transcript||[]).length } },
     manager_message: managerMsg
   };
-
-  let lastErr = "";
-  for (let attempt = 0; attempt < 2; attempt++){
-    try{
-      const res = await fetch(WORKER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      // Worker should ideally always return 200 with JSON; but handle non-OK just in case
-      if (!res.ok){
-        lastErr = await res.text();
-        await sleep(250 * (attempt + 1));
-        continue;
-      }
-
-      const data = await res.json();
-      return {
-        reply: String(data.reply || "Уточните, пожалуйста."),
-        intent: String(data.intent || ""),
-        tags: Array.isArray(data.tags) ? data.tags : []
-      };
-    } catch (e){
-      lastErr = String(e?.message || e);
-      await sleep(250 * (attempt + 1));
-      continue;
-    }
-  }
-
-  throw new Error(lastErr || "worker_error");
+  const res = await fetch(WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return {
+    reply: String(data.reply || "Уточните, пожалуйста."),
+    intent: String(data.intent || ""),
+    tags: Array.isArray(data.tags) ? data.tags : []
+  };
 }
-
 
 function showScoreModal(session){
   const modal = byId("scoreModal");
@@ -660,25 +638,11 @@ function loadSession(sid){
 }
 
 async function createRemoteSession(sid, session){
-  // primary attempt
-  let r = await fetch(`${WORKER_URL}/session/create`, {
+  const r = await fetch(`${WORKER_URL}/session/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sid, session })
   });
-
-  // Some gateways may validate payload strictly; if scoring is disabled and we got 400,
-  // retry once without the optional flag.
-  if (!r.ok && r.status === 400 && session?.scenario?.scoreEnabled === false) {
-    const session2 = JSON.parse(JSON.stringify(session));
-    if (session2?.scenario) delete session2.scenario.scoreEnabled;
-    r = await fetch(`${WORKER_URL}/session/create`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sid, session: session2 })
-    });
-  }
-
   if (!r.ok) throw new Error(await r.text());
   return await r.json();
 }
@@ -689,8 +653,6 @@ async function loadRemoteSession(sid){
   try { return await r.json(); } catch { return null; }
 }
 
-
-function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
 function byId(id){ return document.getElementById(id); }
 function toInt(s, d){ const x = parseInt(String(s||"").trim(),10); return Number.isFinite(x)?x:d; }

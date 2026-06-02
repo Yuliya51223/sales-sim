@@ -293,10 +293,14 @@ textarea:focus{ border-color: rgba(255,255,255,.35); }
   padding-right: 6px;
 }
 
-/* Hide scenario header/meta in manager chat view */
-#scenarioTitle,
-#scenarioMeta {
-  display: none !important;
+/* Rubric label (non-scored row) */
+.rubricLabel{
+  grid-column: 1 / -1;
+  padding: 8px 10px;
+  border: 1px dashed var(--line2);
+  border-radius: 12px;
+  background: rgba(255,255,255,.02);
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 12px;
 }
-
-#linkCreated{ padding:6px 10px; border:1px solid var(--line); border-radius:999px; background: rgba(255,255,255,.06); }
