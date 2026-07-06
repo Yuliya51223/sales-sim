@@ -220,6 +220,115 @@ function buildSession(){
   };
 }
 
+
+/* ---------- Objection balancing ---------- */
+function normalizeRu(s){
+  return String(s || "")
+    .toLowerCase()
+    .replaceAll("ё", "е")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function objectionTokens(objection){
+  const raw = normalizeRu(objection);
+  if (!raw) return [];
+  const parts = raw.split(/\s+/).filter(w => w.length >= 4);
+  return parts.length ? parts : [raw];
+}
+
+function textHasObjection(text, objection){
+  const t = normalizeRu(text);
+  const o = normalizeRu(objection);
+  if (!t || !o) return false;
+
+  if (t.includes(o)) return true;
+
+  // Частые ценовые формулировки: "дорого", "дороговато", "переплата", "дешевле".
+  if (/(дорог|цен[аы]|стоимост|переплат|дешевл)/.test(o)) {
+    return /(дорог|дороговат|цен[аы]|стоимост|переплат|дешевл|бюджет)/.test(t);
+  }
+
+  const tokens = objectionTokens(objection);
+  return tokens.length > 0 && tokens.every(tok => t.includes(tok));
+}
+
+function getMatchedObjection(text, objections){
+  for (const ob of (objections || [])){
+    if (textHasObjection(text, ob)) return ob;
+  }
+  return "";
+}
+
+function managerHandledObjection(text){
+  const t = normalizeRu(text);
+  if (!t) return false;
+
+  // Признаки, что менеджер реально отрабатывает сомнение, а не игнорирует его.
+  return /(понимаю|согласен|объясн|почему|потому|поэтому|гарант|гарантия|качест|сертифик|срок|достав|оплат|рассроч|скидк|акци|вариант|альтернатив|подбер|можем|давайте|расчет|рассчет|итого|стоимост|цена|руб|₽|отзыв|пример|фото|договор|вернуть|замен)/.test(t);
+}
+
+function countClientObjectionMentions(session, objection){
+  let n = 0;
+  for (const m of (session?.transcript || [])){
+    if (m.role === "assistant" && textHasObjection(m.content, objection)) n++;
+  }
+  return n;
+}
+
+function lastClientObjection(session, objections){
+  const tr = session?.transcript || [];
+  for (let i = tr.length - 1; i >= 0; i--){
+    const m = tr[i];
+    if (m.role !== "assistant") continue;
+    const ob = getMatchedObjection(m.content, objections);
+    if (ob) return ob;
+  }
+  return "";
+}
+
+function buildObjectionPolicy(session, managerMsg){
+  const objections = session?.scenario?.client?.objections || [];
+  const prevOb = lastClientObjection(session, objections);
+  const handled = managerHandledObjection(managerMsg);
+  return {
+    rule: "Возражение клиента — это этап диалога, а не постоянная позиция. Не держи весь диалог на одном возражении.",
+    limits: "Одно и то же возражение можно использовать максимум 1-2 раза за весь диалог. Нельзя повторять его подряд.",
+    after_manager_handled: "Если менеджер дал понятное объяснение, гарантию, вариант, расчёт, скидку, альтернативу или задал нормальный уточняющий вопрос, клиент должен смягчиться: признать ответ, перейти к следующему вопросу или следующему шагу. Не повторяй то же возражение.",
+    close_behavior: "Если возражение частично отработано, не соглашайся мгновенно на покупку, но смени фокус: спроси про доставку, сроки, оплату, гарантию, наличие, оформление.",
+    current: {
+      previous_client_objection: prevOb,
+      manager_appears_to_handle_objection: handled,
+      mentions: objections.map(o => ({ objection: o, client_mentions: countClientObjectionMentions(session, o) }))
+    }
+  };
+}
+
+function balanceObjectionReply(session, managerMsg, replyText){
+  const objections = session?.scenario?.client?.objections || [];
+  if (!objections.length) return replyText;
+
+  const prevOb = lastClientObjection(session, objections);
+  const newOb = getMatchedObjection(replyText, objections);
+
+  if (!prevOb || !newOb) return replyText;
+
+  const same = normalizeRu(prevOb) === normalizeRu(newOb) || textHasObjection(prevOb, newOb) || textHasObjection(newOb, prevOb);
+  const alreadyMentioned = countClientObjectionMentions(session, newOb);
+  const handled = managerHandledObjection(managerMsg);
+
+  if (same && handled && alreadyMentioned >= 1) {
+    return "Понял, спасибо за объяснение. Давайте тогда посмотрим, какой вариант мне лучше подойдёт и что нужно для оформления.";
+  }
+
+  if (same && alreadyMentioned >= 2) {
+    return "Хорошо, этот момент понял. Тогда подскажите, пожалуйста, какие есть дальнейшие шаги?";
+  }
+
+  return replyText;
+}
+
 /* ---------- Chat ---------- */
 function initChat(){
   const sid = new URLSearchParams(location.search).get("sid") || "";
@@ -322,8 +431,9 @@ setHint(hintEl, "Оценка появится только после заве�
 
     try {
       const reply = await callWorker(state, text);
-      pushMsg(state.session, "assistant", reply.reply, { intent: reply.intent, tags: reply.tags });
-      appendBubble(chatEl, reply.reply, "client");
+      const balancedReply = balanceObjectionReply(state.session, text, reply.reply);
+      pushMsg(state.session, "assistant", balancedReply, { intent: reply.intent, tags: reply.tags });
+      appendBubble(chatEl, balancedReply, "client");
       setStatus(statusDotEl, statusTextEl, "good", "Готово");
     } catch (e) {
       console.error(e);
@@ -375,8 +485,8 @@ async function startClientFirstMessage(state){
   if (tr.length > 0) return;
 
   const c = state.session.scenario?.client || {};
-  const objections = Array.isArray(c.objections) && c.objections.length ? (" Возможные возражения: " + c.objections.join("; ") + ".") : "";
-  const prompt = `Сгенерируй первое сообщение от клиента для начала переписки. Данные клиента: имя=${c.name||""}, город=${c.city||""}, цель=${c.goal||""}, тон=${c.tone||""}, доставка=${c.delivery||""}. Контекст: ${c.context||""}.${objections} Пиши как реальный покупатель, 1-3 предложения.`;
+  const objections = Array.isArray(c.objections) && c.objections.length ? (" Возможные возражения на будущее: " + c.objections.join("; ") + ". Не используй возражение в первом сообщении, если менеджер ещё ничего не предложил.") : "";
+  const prompt = `Сгенерируй первое сообщение от клиента для начала переписки. Данные клиента: имя=${c.name||""}, город=${c.city||""}, цель=${c.goal||""}, тон=${c.tone||""}, доставка=${c.delivery||""}. Контекст: ${c.context||""}.${objections} Пиши как реальный покупатель, 1-3 предложения. Не начинай с возражения, начни с обычного запроса/интереса.`;
 
   try {
     const reply = await callWorker(state, prompt);
@@ -394,7 +504,14 @@ async function startClientFirstMessage(state){
 async function callWorker(state, managerMsg){
   const payload = {
     history: (state.session.transcript||[]).map(m=>({ role:m.role, content:m.content })).slice(-12),
-    scenario: { ...state.session.scenario, manager: state.session.manager, state: { turns: (state.session.transcript||[]).length } },
+    scenario: {
+      ...state.session.scenario,
+      manager: state.session.manager,
+      state: {
+        turns: (state.session.transcript||[]).length,
+        objection_policy: buildObjectionPolicy(state.session, managerMsg)
+      }
+    },
     manager_message: managerMsg
   };
 
