@@ -541,3 +541,442 @@ textarea:focus,
   background:#ffffff !important;
   color:#111827 !important;
 }
+
+
+/* ===================== GREEN PALETTE + INTER THEME ===================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root{
+  --c-ink:#0F2A1D;
+  --c-deep:#375534;
+  --c-mid:#6B9071;
+  --c-soft:#AEC3B0;
+  --c-cream:#E3EED4;
+
+  --bg:#E3EED4;
+  --panel:#F7FAF0;
+  --panel2:#EEF5E4;
+  --text:#0F2A1D;
+  --muted:#536553;
+  --line:rgba(15,42,29,.14);
+  --line2:rgba(15,42,29,.22);
+  --accent:#375534;
+  --accent2:#6B9071;
+  --good:#375534;
+  --warn:#8A6F2A;
+  --bad:#9B3A35;
+
+  --shadow:0 20px 55px rgba(15,42,29,.13);
+  --shadow-soft:0 10px 28px rgba(15,42,29,.09);
+}
+
+*{ box-sizing:border-box; }
+
+html{
+  min-height:100%;
+  background:#E3EED4;
+}
+
+body,
+body.page-setup,
+body.page-chat,
+body.page-review{
+  min-height:100vh;
+  margin:0;
+  font-family:'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important;
+  color:var(--text) !important;
+  background:
+    radial-gradient(900px 520px at 50% -120px, rgba(174,195,176,.95) 0%, rgba(227,238,212,.72) 55%, rgba(227,238,212,0) 78%),
+    linear-gradient(180deg, #E3EED4 0%, #AEC3B0 58%, #6B9071 100%) !important;
+  background-attachment:fixed !important;
+}
+
+/* Убираем визуальные “разрывы” фона между секциями */
+main,
+.layout,
+.setupLayout,
+.footer,
+.wrap,
+.page-review .wrap{
+  background:transparent !important;
+}
+
+.topbar,
+body.page-review .topbar{
+  position:sticky;
+  top:0;
+  z-index:10;
+  background:rgba(227,238,212,.86) !important;
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid rgba(15,42,29,.12) !important;
+  box-shadow:0 12px 35px rgba(15,42,29,.08) !important;
+}
+
+.logo{
+  background:#AEC3B0 !important;
+  border:1px solid rgba(15,42,29,.12) !important;
+  color:#0F2A1D !important;
+}
+
+.title,
+.h3,
+.hgroup h2,
+.hgroup h3,
+.card h2,
+.card h3,
+body.page-review h1,
+body.page-review h2,
+body.page-review h3,
+body.page-review label,
+body.page-review .title{
+  color:#0F2A1D !important;
+  letter-spacing:-.02em;
+}
+
+.subtitle,
+.meta,
+.small,
+.field span,
+.hint,
+.status,
+body.page-review .muted,
+body.page-review .k,
+body.page-review .sub,
+body.page-review .meta{
+  color:#536553 !important;
+}
+
+.layout{
+  max-width:1220px;
+}
+
+.card,
+.cardInner,
+body.page-review .card{
+  background:rgba(247,250,240,.88) !important;
+  border:1px solid rgba(15,42,29,.13) !important;
+  box-shadow:var(--shadow) !important;
+  color:#0F2A1D !important;
+}
+
+.card{
+  border-radius:26px !important;
+  overflow:hidden;
+}
+
+.cardInner{
+  border-radius:22px !important;
+  box-shadow:var(--shadow-soft) !important;
+}
+
+.cardHead{
+  background:rgba(247,250,240,.54) !important;
+  border-bottom:1px solid rgba(15,42,29,.10) !important;
+  align-items:center !important;
+}
+
+.setupGrid{
+  gap:18px !important;
+}
+
+.form{
+  gap:12px !important;
+}
+
+.field input,
+.field select,
+textarea,
+.rubricPoints input,
+.linkOut,
+body.page-review input{
+  background:rgba(255,255,246,.80) !important;
+  color:#0F2A1D !important;
+  border:1px solid rgba(15,42,29,.18) !important;
+  border-radius:16px !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55);
+  font-family:'Inter', system-ui, sans-serif !important;
+}
+
+.field input::placeholder,
+textarea::placeholder,
+.linkOut::placeholder,
+body.page-review input::placeholder{
+  color:rgba(83,101,83,.72) !important;
+}
+
+.field input:focus,
+.field select:focus,
+textarea:focus,
+.rubricPoints input:focus,
+.linkOut:focus,
+body.page-review input:focus{
+  outline:none !important;
+  border-color:#6B9071 !important;
+  box-shadow:0 0 0 4px rgba(107,144,113,.18) !important;
+}
+
+.btn,
+button,
+body.page-review button{
+  font-family:'Inter', system-ui, sans-serif !important;
+  background:#375534 !important;
+  border:1px solid #375534 !important;
+  color:#E3EED4 !important;
+  border-radius:16px !important;
+  font-weight:700 !important;
+  box-shadow:0 10px 20px rgba(55,85,52,.18);
+}
+
+.btn:hover,
+button:hover,
+body.page-review button:hover{
+  background:#0F2A1D !important;
+  border-color:#0F2A1D !important;
+  filter:none !important;
+}
+
+.btn-ghost,
+body.page-review .btn-ghost{
+  background:rgba(227,238,212,.65) !important;
+  border-color:rgba(15,42,29,.16) !important;
+  color:#0F2A1D !important;
+  box-shadow:none !important;
+}
+
+.btn-ghost:hover{
+  background:#AEC3B0 !important;
+  border-color:#AEC3B0 !important;
+  color:#0F2A1D !important;
+}
+
+.toggle,
+.pill,
+.badge,
+body.page-review .pill{
+  background:rgba(227,238,212,.72) !important;
+  border:1px solid rgba(15,42,29,.14) !important;
+  color:#0F2A1D !important;
+}
+
+.rubricBlock,
+.rubricItem,
+.checkItem,
+body.page-review li,
+body.page-review .scoreBlock{
+  background:rgba(238,245,228,.82) !important;
+  border:1px solid rgba(15,42,29,.12) !important;
+  color:#0F2A1D !important;
+}
+
+body.page-review li{
+  border-radius:18px !important;
+}
+
+body.page-review li:hover{
+  background:rgba(174,195,176,.44) !important;
+}
+
+body.page-review .dialogTitle{
+  color:#0F2A1D !important;
+  font-weight:800 !important;
+}
+
+.rubricTitle,
+.checkTitle,
+body.page-review .scoreBlockTitle,
+body.page-review .scoreTitle{
+  color:#0F2A1D !important;
+}
+
+.rubricHeader,
+.checkDesc{
+  color:#536553 !important;
+}
+
+.linkCard{
+  background:rgba(247,250,240,.92) !important;
+}
+
+.linkToast,
+#linkCreated{
+  background:#AEC3B0 !important;
+  color:#0F2A1D !important;
+  border-color:rgba(15,42,29,.13) !important;
+  font-weight:700 !important;
+}
+
+/* Chat */
+.page-chat .layout{
+  max-width:1040px !important;
+}
+
+.page-chat .chatCard{
+  min-height:680px;
+  background:rgba(247,250,240,.90) !important;
+}
+
+.page-chat .chat{
+  background:transparent !important;
+}
+
+.page-chat .composer{
+  background:rgba(238,245,228,.72) !important;
+  border-top:1px solid rgba(15,42,29,.12) !important;
+}
+
+.page-chat .msg .bubble{
+  background:rgba(255,255,246,.88) !important;
+  color:#0F2A1D !important;
+  border:1px solid rgba(15,42,29,.12) !important;
+  box-shadow:0 10px 24px rgba(15,42,29,.08);
+}
+
+.page-chat .msg.me .bubble{
+  background:#375534 !important;
+  color:#E3EED4 !important;
+  border-color:#375534 !important;
+}
+
+.dot.good,
+body.page-review .scoreBar > div{
+  background:#375534 !important;
+  border-color:#375534 !important;
+}
+
+.dot.warn{ background:#8A6F2A !important; border-color:#8A6F2A !important; }
+.dot.bad{ background:#9B3A35 !important; border-color:#9B3A35 !important; }
+
+/* Modal */
+.modal{
+  background:rgba(15,42,29,.36) !important;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+
+.modalCard,
+#fioModal .modalCard{
+  background:#F7FAF0 !important;
+  color:#0F2A1D !important;
+  border:1px solid rgba(15,42,29,.12) !important;
+  box-shadow:0 26px 90px rgba(15,42,29,.28) !important;
+}
+
+#fioModal input{
+  background:rgba(255,255,246,.86) !important;
+  color:#0F2A1D !important;
+}
+
+/* Review page fixes */
+body.page-review .bubble.me{
+  background:#375534 !important;
+  color:#E3EED4 !important;
+  border-color:#375534 !important;
+}
+
+body.page-review .bubble.them{
+  background:rgba(255,255,246,.88) !important;
+  color:#0F2A1D !important;
+  border-color:rgba(15,42,29,.12) !important;
+}
+
+body.page-review pre{
+  background:rgba(238,245,228,.86) !important;
+  color:#0F2A1D !important;
+  border-color:rgba(15,42,29,.12) !important;
+}
+
+body.page-review .scoreBar{
+  background:rgba(15,42,29,.12) !important;
+}
+
+body.page-review .scoreTable,
+body.page-review .scoreTable *,
+body.page-review table,
+body.page-review table *{
+  color:#0F2A1D !important;
+}
+
+/* Avoid white text leftovers */
+body.page-review,
+body.page-review *{
+  color:#0F2A1D;
+}
+
+body.page-review button,
+body.page-review button *{
+  color:#E3EED4 !important;
+}
+
+body.page-review .muted,
+body.page-review .k,
+body.page-review .sub,
+body.page-review .meta{
+  color:#536553 !important;
+}
+
+@media(max-width:760px){
+  .card{ border-radius:20px !important; }
+  .cardInner{ border-radius:18px !important; }
+}
+
+
+/* ===================== BACKGROUND GAP FIX ===================== */
+/* Единый фон для всей высоты документа, включая зоны после прокрутки */
+html,
+body{
+  min-height:100%;
+  background-color:#E3EED4 !important;
+}
+
+html{
+  background:
+    radial-gradient(900px 520px at 50% -120px, rgba(174,195,176,.95) 0%, rgba(227,238,212,.72) 55%, rgba(227,238,212,0) 78%),
+    linear-gradient(180deg, #E3EED4 0%, #AEC3B0 58%, #6B9071 100%) !important;
+  background-repeat:no-repeat !important;
+  background-attachment:fixed !important;
+  background-size:100% 100vh !important;
+}
+
+body,
+body.page-setup,
+body.page-chat,
+body.page-review{
+  min-height:100vh !important;
+  background:transparent !important;
+  background-color:transparent !important;
+}
+
+/* Основные контейнеры не должны перекрывать фон полосами */
+main,
+.layout,
+.setupLayout,
+.wrap,
+.footer,
+.page-review .wrap,
+.page-chat main,
+.page-setup main,
+.page-review main{
+  background:transparent !important;
+}
+
+/* Нижняя часть страницы тоже сохраняет цвет палитры */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  pointer-events:none;
+  background:
+    radial-gradient(900px 520px at 50% -120px, rgba(174,195,176,.95) 0%, rgba(227,238,212,.72) 55%, rgba(227,238,212,0) 78%),
+    linear-gradient(180deg, #E3EED4 0%, #AEC3B0 58%, #6B9071 100%);
+}
+
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  background:rgba(227,238,212,.08);
+}
