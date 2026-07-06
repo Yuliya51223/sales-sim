@@ -90,9 +90,122 @@
     .scoreTitle { font-size: 13px; }
     .pts { font-size: 12px; color: var(--muted); white-space:nowrap; padding-top:2px; }
       body{background:#000;}
-</style>
+
+    /* Light review overrides */
+    body.page-review{
+      background:#f6f8fb;
+      color:#1f2937;
+    }
+    body.page-review .topbar{
+      background:rgba(255,255,255,.92);
+      border-bottom:1px solid #e5e7eb;
+    }
+    body.page-review .logo{ color:#1f2937; }
+    body.page-review .card{
+      background:#ffffff;
+      border:1px solid #e5e7eb;
+      box-shadow:0 10px 30px rgba(17,24,39,.06);
+    }
+    body.page-review input{
+      background:#ffffff;
+      border:1px solid #d7dde7;
+      color:#111827;
+    }
+    body.page-review button{
+      background:#2563eb;
+      color:#ffffff;
+      border-color:#2563eb;
+    }
+    body.page-review li{
+      background:#f8fafc;
+      border-color:#e5e7eb;
+      color:#111827;
+    }
+    body.page-review li:hover{ background:#eef4ff; }
+    body.page-review .muted{ color:#6b7280; }
+    body.page-review .pill{
+      background:#f3f6fb;
+      border-color:#e5e7eb;
+      color:#374151;
+    }
+    body.page-review .bubble.me{
+      background:#dbeafe;
+      color:#0f172a;
+      border-color:#bfdbfe;
+    }
+    body.page-review .bubble.them{
+      background:#ffffff;
+      color:#111827;
+      border-color:#e5e7eb;
+      box-shadow:0 4px 14px rgba(17,24,39,.05);
+    }
+    body.page-review pre{
+      background:#f8fafc;
+      color:#111827;
+      border-color:#e5e7eb;
+    }
+    body.page-review .scoreBlock{
+      background:#f8fafc;
+      border-color:#e5e7eb;
+    }
+    body.page-review .scoreBlockTitle,
+    body.page-review .scoreTitle{ color:#111827; }
+    body.page-review .scoreBar{ background:#e5e7eb; }
+    body.page-review .scoreBar > div{ background:#2563eb; }
+
+  
+    /* Review readability fix */
+    body.page-review,
+    body.page-review *{
+      color:#111827;
+    }
+    body.page-review .muted,
+    body.page-review .k,
+    body.page-review .sub,
+    body.page-review .meta{
+      color:#6b7280 !important;
+    }
+    body.page-review .dialogTitle{
+      color:#111827 !important;
+      font-weight:700;
+      font-size:14px;
+      line-height:1.25;
+    }
+    body.page-review h1,
+    body.page-review h2,
+    body.page-review h3,
+    body.page-review label,
+    body.page-review .title{
+      color:#111827 !important;
+    }
+    body.page-review input{
+      color:#111827 !important;
+      background:#ffffff !important;
+    }
+    body.page-review input::placeholder{
+      color:#9ca3af !important;
+    }
+    body.page-review .bubble.me{
+      color:#0f172a !important;
+    }
+    body.page-review .bubble.them{
+      color:#111827 !important;
+    }
+    body.page-review .pill{
+      color:#111827 !important;
+      background:#f3f6fb !important;
+      border-color:#e5e7eb !important;
+    }
+    body.page-review .scoreTable,
+    body.page-review .scoreTable *,
+    body.page-review table,
+    body.page-review table *{
+      color:#111827 !important;
+    }
+
+  </style>
 </head>
-<body>
+<body class="page-review">
   <div class="topbar">
     <div class="topbar__left">
       <div class="logo">Просмотр диалогов</div>
@@ -218,13 +331,19 @@ function pickManagerFio(obj) {
       || '';
 }
 
+function pickManagerSurname(obj) {
+  const fio = String(pickManagerFio(obj) || '').trim();
+  if (!fio) return '';
+  return fio.split(/\s+/)[0] || '';
+}
+
 
 function renderTitle(obj){
-  const fio = pickManagerFio(obj);
+  const surname = pickManagerSurname(obj);
   const dt = obj.createdAt || obj.endedAt || obj.metadata?.endedAt || obj.metadata?.createdAt || '';
   const dtShort = dt ? String(dt).replace('T',' ').replace('Z','') : '';
-  if (fio && dtShort) return `Диалог — ${fio} — ${dtShort}`;
-  if (fio) return `Диалог — ${fio}`;
+  if (surname && dtShort) return `Диалог — ${surname} — ${dtShort}`;
+  if (surname) return `Диалог — ${surname}`;
   if (dtShort) return `Диалог — ${dtShort}`;
   return 'Диалог';
 }
@@ -406,11 +525,13 @@ async function enrichListItem(key, li){
     const isSess = String(key).startsWith('sess:');
     if (isSess) return;
     const data = await api('/get?key=' + encodeURIComponent(key));
-    const fio = pickManagerFio(data) || '—';
+    const surname = pickManagerSurname(data) || 'Диалог';
     const dt = data.createdAt || data.endedAt || data.metadata?.endedAt || data.metadata?.createdAt || '';
     const dtShort = dt ? String(dt).slice(0,19).replace('T',' ') : '—';
+    const title = li.querySelector('.dialogTitle');
     const sub = li.querySelector('.k');
-    if (sub) sub.textContent = `Диалог/результат (s_...) · ${fio} · ${dtShort}`;
+    if (title) title.textContent = surname;
+    if (sub) sub.textContent = `${dtShort} · ${key}`;
   } catch(e){
     // silently ignore (token, network, etc.)
   }
@@ -422,8 +543,8 @@ function renderList(keys) {
     const li = document.createElement('li');
     const isSess = String(key).startsWith('sess:');
     li.innerHTML = `
-      <div>${escapeHtml(key)}</div>
-      <div class="k">${isSess ? 'Настройки (sess:...)' : 'Диалог/результат (s_...)'}</div>
+      <div class="dialogTitle">${isSess ? 'Настройки' : 'Диалог'}</div>
+      <div class="k">${isSess ? escapeHtml(key) : 'Загрузка данных…'}</div>
     `;
     li.onclick = async () => {
       try {
@@ -431,11 +552,13 @@ function renderList(keys) {
         const data = await api('/get?key=' + encodeURIComponent(key));
         renderViewer(data);
         try {
-          const fio = pickManagerFio(data);
+          const surname = pickManagerSurname(data) || 'Диалог';
           const dt = data.createdAt || data.endedAt || data.metadata?.endedAt || data.metadata?.createdAt || '';
           const dtShort = dt ? String(dt).slice(0,19).replace('T',' ') : '';
+          const title = li.querySelector('.dialogTitle');
           const sub = li.querySelector('.k');
-          if (sub) sub.textContent = (String(key).startsWith('sess:') ? 'Настройки (sess:...)' : 'Диалог/результат (s_...)') + (fio || dtShort ? ` · ${fio || '—'} · ${dtShort || '—'}` : '');
+          if (title && !String(key).startsWith('sess:')) title.textContent = surname;
+          if (sub) sub.textContent = String(key).startsWith('sess:') ? key : `${dtShort || '—'} · ${key}`;
         } catch(e) {}
 
       } catch (e) {

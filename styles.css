@@ -293,14 +293,224 @@ textarea:focus{ border-color: rgba(255,255,255,.35); }
   padding-right: 6px;
 }
 
-/* Rubric label (non-scored row) */
-.rubricLabel{
-  grid-column: 1 / -1;
-  padding: 8px 10px;
-  border: 1px dashed var(--line2);
-  border-radius: 12px;
-  background: rgba(255,255,255,.02);
-  color: var(--muted);
-  font-weight: 700;
-  font-size: 12px;
+/* Hide scenario header/meta in manager chat view */
+#scenarioTitle,
+#scenarioMeta {
+  display: none !important;
+}
+
+#linkCreated{ padding:6px 10px; border:1px solid var(--line); border-radius:999px; background: rgba(255,255,255,.06); }
+
+
+
+/* ===================== LIGHT THEME UPDATE ===================== */
+:root{
+  --bg:#f6f8fb;
+  --panel:#ffffff;
+  --panel2:#f8fafc;
+  --text:#111827;
+  --muted:#6b7280;
+  --line:#e5e7eb;
+  --line2:#d7dde7;
+  --accent:#2563eb;
+  --good:#16a34a;
+  --warn:#d97706;
+  --bad:#dc2626;
+}
+
+body{
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%) !important;
+  color:var(--text) !important;
+}
+
+.topbar{
+  background:rgba(255,255,255,.92) !important;
+  border-bottom:1px solid var(--line) !important;
+  box-shadow:0 10px 30px rgba(17,24,39,.04);
+}
+.logo{
+  background:#eff6ff !important;
+  border-color:#dbeafe !important;
+}
+.card,
+.cardInner{
+  background:#ffffff !important;
+  border:1px solid var(--line) !important;
+  box-shadow:0 12px 34px rgba(17,24,39,.07) !important;
+}
+.cardInner{
+  border-radius:16px;
+  padding:14px;
+}
+.cardHead{
+  border-bottom:1px solid var(--line) !important;
+  align-items:center !important;
+}
+.meta,
+.subtitle,
+.field span,
+.small,
+.hint,
+.status{
+  color:var(--muted) !important;
+}
+
+.layout.setupLayout{
+  max-width:1220px;
+  grid-template-columns:1fr !important;
+}
+.setupGrid{
+  margin:14px;
+  align-items:start;
+}
+.form{
+  padding:10px 0 0 !important;
+}
+.field input,
+.field select,
+textarea,
+.rubricPoints input,
+.linkOut{
+  background:#ffffff !important;
+  color:var(--text) !important;
+  border:1px solid var(--line2) !important;
+}
+.field input:focus,
+.field select:focus,
+textarea:focus,
+.rubricPoints input:focus,
+.linkOut:focus{
+  border-color:#93c5fd !important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.10);
+}
+.btn{
+  background:var(--accent) !important;
+  border-color:var(--accent) !important;
+  color:#ffffff !important;
+}
+.btn-ghost{
+  background:#ffffff !important;
+  border-color:var(--line2) !important;
+  color:#1f2937 !important;
+}
+.btn-ghost:hover,
+.btn:hover{
+  filter:none !important;
+  transform:translateY(-1px);
+}
+.toggle,
+.pill,
+.badge{
+  background:#f8fafc !important;
+  border-color:var(--line) !important;
+  color:var(--text) !important;
+}
+.toggle{
+  padding:8px 12px !important;
+}
+.rubricBlock,
+.rubricItem,
+.checkItem{
+  background:#f8fafc !important;
+  border-color:var(--line) !important;
+}
+.rubricTitle,
+.checkTitle{
+  color:#111827 !important;
+}
+.rubricHeader,
+.checkDesc{
+  color:var(--muted) !important;
+}
+.modal{
+  background:rgba(17,24,39,.38) !important;
+}
+.modalCard{
+  background:#ffffff !important;
+  color:var(--text) !important;
+  border-color:var(--line) !important;
+  box-shadow:0 24px 80px rgba(17,24,39,.18) !important;
+}
+
+/* Link card alignment */
+.linkCard{
+  margin:14px !important;
+}
+.linkCardHead{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+.linkRow{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+}
+.linkToast{
+  padding:7px 11px !important;
+  border:1px solid #bbf7d0 !important;
+  border-radius:999px;
+  background:#ecfdf5 !important;
+  color:#15803d !important;
+  white-space:nowrap;
+}
+.noPad{
+  padding:0 !important;
+}
+.scoreHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+.scoreHead .h3{
+  margin:0;
+}
+@media(max-width:760px){
+  .linkCardHead,
+  .scoreHead{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .linkRow{
+    grid-template-columns:1fr;
+  }
+}
+
+/* Chat page light */
+.page-chat .layout{
+  max-width:980px !important;
+}
+.page-chat .chatCard{
+  min-height:680px;
+}
+.page-chat .chat{
+  background:#ffffff !important;
+}
+.page-chat .composer{
+  background:#f8fafc !important;
+  border-top:1px solid var(--line) !important;
+}
+.page-chat .msg .bubble{
+  background:#ffffff !important;
+  color:#111827 !important;
+  border-color:#e5e7eb !important;
+  box-shadow:0 4px 14px rgba(17,24,39,.05);
+}
+.page-chat .msg.me .bubble{
+  background:#dbeafe !important;
+  border-color:#bfdbfe !important;
+}
+.page-chat .chatTitle .meta{
+  display:none !important;
+}
+
+/* Hide any scenario technical info */
+#scenarioTitle,
+#scenarioMeta{
+  display:none !important;
 }
