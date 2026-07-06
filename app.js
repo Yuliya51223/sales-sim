@@ -236,7 +236,7 @@ function initChat(){
   const endBtn = byId("endBtn");
 
   if (!sid) {
-  scenarioTitleEl.textContent = "Сессия не найдена";
+  setTextSafe(scenarioTitleEl, "Сессия не найдена");
   scenarioMetaEl.textContent = "Откройте чат по ссылке из страницы настройки.";
   setStatus(statusDotEl, statusTextEl, "bad", "Нет sid");
   inputEl.disabled = true; sendBtn.disabled = true; endBtn.disabled = true;
@@ -251,8 +251,8 @@ if (!session) {
 
   loadRemoteSession(sid).then((remote) => {
     if (!remote) {
-      scenarioTitleEl.textContent = "Сессия не найдена";
-      scenarioMetaEl.textContent = "Сессия не найдена на сервере. Создайте ссылку заново.";
+      setTextSafe(scenarioTitleEl, "Сессия не найдена");
+      setTextSafe(scenarioMetaEl, "Сессия не найдена на сервере. Создайте ссылку заново.");
       setStatus(statusDotEl, statusTextEl, "bad", "Нет сессии");
       return;
     }
@@ -260,8 +260,8 @@ if (!session) {
     location.reload();
   }).catch((e) => {
     console.error(e);
-    scenarioTitleEl.textContent = "Ошибка загрузки";
-    scenarioMetaEl.textContent = "Не удалось загрузить сессию с сервера.";
+    setTextSafe(scenarioTitleEl, "Ошибка загрузки");
+    setTextSafe(scenarioMetaEl, "Не удалось загрузить сессию с сервера.");
     setStatus(statusDotEl, statusTextEl, "bad", "Ошибка");
   });
 
@@ -271,8 +271,8 @@ if (!session) {
   const state = { sid, session, ended: !!session.endedAt };
 
   const c = session.scenario.client;
-  scenarioTitleEl.textContent = session.scenario.title;
-  scenarioMetaEl.textContent = `Клиент: ${c.name} • ${c.city} • Тон: ${c.tone} • Доставка: ${c.delivery} • Цель: ${c.goal}`;
+  setTextSafe(scenarioTitleEl, session.scenario?.title || "Сценарий");
+  setTextSafe(scenarioMetaEl, `Клиент: ${c.name} • ${c.city} • Тон: ${c.tone} • Доставка: ${c.delivery} • Цель: ${c.goal}`);
 
   renderChat(chatEl, session.transcript || []);
   ensureManagerFio(state);
@@ -346,15 +346,26 @@ function ensureManagerFio(state){
   const nameEl = byId("mgrName");
   const okBtn = byId("mgrOk");
 
+  if (!modal || !nameEl || !okBtn) {
+    console.error("Не найдено окно ФИО менеджера: fioModal/mgrName/mgrOk");
+    return;
+  }
+
   modal.classList.remove("hidden");
-  nameEl.focus();
+  modal.style.display = "flex";
+  nameEl.value = "";
+  setTimeout(() => nameEl.focus(), 50);
 
   okBtn.onclick = () => {
     const fio = (nameEl.value || "").trim();
-    if (!fio) return;
+    if (!fio) {
+      nameEl.focus();
+      return;
+    }
     state.session.manager = { fio };
     saveSession(state.sid, state.session);
     modal.classList.add("hidden");
+    modal.style.display = "";
     startClientFirstMessage(state);
   };
 }
@@ -697,6 +708,7 @@ async function loadRemoteSession(sid){
 function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
 function byId(id){ return document.getElementById(id); }
+function setTextSafe(el, text){ if (el) el.textContent = text == null ? "" : String(text); }
 function toInt(s, d){ const x = parseInt(String(s||"").trim(),10); return Number.isFinite(x)?x:d; }
 function randomId(n){ const a="abcdefghijklmnopqrstuvwxyz0123456789"; let s=""; for (let i=0;i<n;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
 function countOcc(text, sub){ let n=0,i=0; while(true){ i=text.indexOf(sub,i); if(i===-1) break; n++; i+=sub.length; } return n; }

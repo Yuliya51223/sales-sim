@@ -514,3 +514,30 @@ textarea:focus,
 #scenarioMeta{
   display:none !important;
 }
+
+
+
+/* FIO modal / hidden scenario safety */
+.srOnly{
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  padding:0 !important;
+  margin:-1px !important;
+  overflow:hidden !important;
+  clip:rect(0,0,0,0) !important;
+  white-space:nowrap !important;
+  border:0 !important;
+}
+#fioModal.modal{
+  align-items:center;
+  justify-content:center;
+}
+#fioModal .modalCard{
+  background:#ffffff !important;
+  color:#111827 !important;
+}
+#fioModal input{
+  background:#ffffff !important;
+  color:#111827 !important;
+}
